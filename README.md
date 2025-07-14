@@ -55,19 +55,20 @@ The project aims to evaluate the role of intermediate-length **CAG repeats** in 
 
 ├── 📁 R/                           # R scripts for analysis and visualization
 
-│   ├── 01_Environment.R           # Package setup and data import
+│   ├── [01_Environment.R](R/01_Environment.R)           # Package setup and data import
 
-│   ├── 02_Demographic_analysis.R  # Demographic summary and statistics
+│   ├── [02_Demographic_analysis.R](R/02_Demographic_analysis.R)  # Demographic summary and statistics
 
-│   ├── 03_Genotype_stats.R        # Analysis of genotype distributions
+│   ├── [03_Genotype_stats.R](R/03_Genotype_stats.R)        # Analysis of genotype distributions
 
-│   ├── 04_CAG_repeat_sizes.R      # Descriptive analysis of CAG repeat sizes
+│   ├── [04_CAG_repeat_sizes.R](R/04_CAG_repeat_sizes.R)      # Descriptive analysis of CAG repeat sizes
 
-│   ├── 05_Regression_models.R     # Binomial and multinomial regression models
+│   ├── [05_Regression_models.R](R/05_Regression_models.R)     # Binomial and multinomial regression models
 
-│   ├── 06_Survival_age_analysis.R # Survival and age-at-onset analyses
+│   ├── [06_Survival_age_analysis.R](R/06_Survival_age_analysis.R) # Survival and age-at-onset analyses
 
-│   └── 07_Enrichr-KG.R            # Functional enrichment using Enrichr and knowledge graphs
+│   └── [07_Enrichr-KG.R](R/07_Enrichr-KG.R)            # Functional enrichment using Enrichr and knowledge graphs
+
 
 ├── 📁 results/                    # Output figures and summary tables
 
