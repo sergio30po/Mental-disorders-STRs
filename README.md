@@ -42,24 +42,39 @@ The project aims to evaluate the role of intermediate-length **CAG repeats** in 
 📁 Mental-disorders-STRs/
 
 ├── 📁 data/                        # Input datasets
+
 │   ├── Controls.xlsx              # Genetic data from control individuals
+
 │   ├── Mental_disorders.xlsx     # Clinical and genetic data from patients
+
 │   ├── Variables.xlsx            # Covariates and metadata
+
 │   ├── edges.tsv                 # Edgelist for gene/miRNA interaction network
+
 │   └── nodes.tsv                 # Nodelist for gene/miRNA interaction network
 
 ├── 📁 R/                           # R scripts for analysis and visualization
+
 │   ├── 01_Environment.R           # Package setup and data import
+
 │   ├── 02_Demographic_analysis.R  # Demographic summary and statistics
+
 │   ├── 03_Genotype_stats.R        # Analysis of genotype distributions
+
 │   ├── 04_CAG_repeat_sizes.R      # Descriptive analysis of CAG repeat sizes
+
 │   ├── 05_Regression_models.R     # Binomial and multinomial regression models
+
 │   ├── 06_Survival_age_analysis.R # Survival and age-at-onset analyses
+
 │   └── 07_Enrichr-KG.R            # Functional enrichment using Enrichr and knowledge graphs
 
 ├── 📁 results/                    # Output figures and summary tables
+
 │   ├── BD.xlsx/               # Biolar disorder dataset
+
 │   ├── SCH.xlsx/             # Shizophrenia dataset
+
 │   └── DT.xlsx/               # Complete dataset
 
 ├── LICENSE                       # License file for the project
