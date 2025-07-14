@@ -41,7 +41,7 @@ The project aims to evaluate the role of intermediate-length **CAG repeats** in 
 
 Mental-disorders-STRs/
 
-├── data/ # Input datasets (Controls, mental disorders, egdes, nodes)
+├── data/ # Input datasets (Controls, mental disorders, egdes, nodes, variables)
 
 ├── R/ # R scripts for analysis and visualization
 
