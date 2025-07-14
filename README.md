@@ -2,7 +2,7 @@
 
 This repository contains the analysis code for the scientific study titled:
 
-**"Exploring the role of CAG repeats in HTT, ATXN1 and ATXN2 genes in the genetic architecture of mental disorders: schizophrenia and bipolar disorder."**
+**Exploring the role of CAG repeats in *HTT*, *ATXN1* and *ATXN2* genes in the genetic architecture of mental disorders: schizophrenia and bipolar disorder.**
 
 ### 📋 Authors
 
