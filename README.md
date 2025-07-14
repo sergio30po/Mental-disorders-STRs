@@ -43,15 +43,15 @@ The project aims to evaluate the role of intermediate-length **CAG repeats** in 
 
 ├── 📁 data/                        # Input datasets
 
-│   ├── Controls.xlsx              # Genetic data from control individuals
+│   ├── [Controls.xlsx](data/Controls.xlsx)              # Genetic data from control individuals
 
-│   ├── Mental_disorders.xlsx     # Clinical and genetic data from patients
+│   ├── [Mental_disorders.xlsx](data/Mental_disorders.xlsx)      # Clinical and genetic data from patients
 
-│   ├── Variables.xlsx            # Covariates and metadata
+│   ├── [Variables.xlsx](data/Variables.xlsx)            # Covariates and metadata
 
-│   ├── edges.tsv                 # Edgelist for gene/miRNA interaction network
+│   ├── [edges.tsv](data/edges.tsv)                 # Edgelist for gene/miRNA interaction network
 
-│   └── nodes.tsv                 # Nodelist for gene/miRNA interaction network
+│   └── [nodes.tsv](data/nodes.tsv)                   # Nodelist for gene/miRNA interaction network
 
 ├── 📁 R/                           # R scripts for analysis and visualization
 
@@ -72,11 +72,11 @@ The project aims to evaluate the role of intermediate-length **CAG repeats** in 
 
 ├── 📁 results/                    # Output figures and summary tables
 
-│   ├── BD.xlsx/               # Biolar disorder dataset
+│   ├── [BD.xlsx](results/BD.xlsx)               # Biolar disorder dataset
 
-│   ├── SCH.xlsx/             # Shizophrenia dataset
+│   ├── [SCH.xlsx](results/SCH.xlsx)            # Shizophrenia dataset
 
-│   └── DT.xlsx/               # Complete dataset
+│   └── [DT.xlsx](results/DT.xlsx)             # Complete dataset
 
 ├── LICENSE                       # License file for the project
 
