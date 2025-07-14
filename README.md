@@ -61,7 +61,7 @@ If you use this code in your work, please cite the corresponding paper (referenc
 
 ### 📎 Availability
 
-The full analysis code is openly available here at [GITHUB REPOSITORY].
+The full analysis code is openly available here at [MENTAL DISORDERS STRs](https://github.com/sergio30po/Mental-disorders-STRs).
 
 ---
 
