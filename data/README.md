@@ -33,15 +33,5 @@ Clinical and genetic variables are included solely for research reproducibility.
 
 ---
 
-## 🧩 Related Scripts
-
-- `01_data_loading_and_filtering.R`: loads and formats datasets.  
-- `02_descriptive_analysis.R`: performs descriptive and comparative statistics.  
-- `03_DE_analysis.R`: includes analyses of differential expansion or distribution patterns.  
-- `05_Regression_models.R`: fits regression models using genetic and clinical predictors.  
-- `enrich_KG_analysis.R`: generates and visualizes the enrichment network using `edges.tsv` and `nodes.tsv`.
-
----
-
 **Author:** Sergio Pérez-Oliveira  
 **Last update:** October 2025
