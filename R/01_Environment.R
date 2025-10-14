@@ -1,8 +1,12 @@
 # Script name: 01_Environment.R
 # ==============================================================================
+# Title: Project environment.
+
 # Author: Sergio Pérez Oliveira
+
 # Purpose: Load and preprocess datasets for analysis of
 #          frequencies and correlations in mental disorder cohorts.
+
 # Dependencies: tidyverse, readxl, dplyr, ggplot2, etc.
 
 # Description:
@@ -163,9 +167,11 @@ BD <- BD |> mutate(
 )
 
 # Schizophrenia subset and transformations
-SCH <- subset(MENTAL, PATHOLOGY == "SCH") |> select(-CD)
+SCH <- subset(MENTAL, PATHOLOGY == "SCH")
 SCH <- SCH |> mutate(
-  PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == 1, "SCH", "Other"), levels = c("SCH", "Other"))
+  PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == 1, "SCH", "Other"), levels = c("SCH", "Other")),
+  CD = factor(CD, labels = c("NO", "MILD", "MODERATE", "SEVERE")),
+  CD_BINARY = factor(ifelse(CD == "NO", "NO", "CD"), levels = c("NO", "CD"))
 )
 
 # Add binary pathology columns to controls
@@ -187,8 +193,8 @@ BD_CONTROLS <- bind_rows(
 )
 
 SCH_CONTROLS <- bind_rows(
-  SCH |> select(-COFFEE, -ONSET_AGE, -DURATION, -PATHOLOGY_TYPE),
-  CONTROLS |> select(-CD_BINARY)
+  SCH |> select(-COFFEE,-CD, -ONSET_AGE, -DURATION, -PATHOLOGY_TYPE),
+  CONTROLS
 )
 
 # Output section ----

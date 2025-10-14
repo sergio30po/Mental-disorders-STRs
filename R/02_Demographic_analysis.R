@@ -1,16 +1,20 @@
 # Script name: 02_Demographic_analysis.R
 # ==============================================================================
-# Title: Descriptive analysis of psychiatric cohorts (SCZ, BD, Controls)
+# Title: Descriptive analysis of psychiatric cohorts (SCZ, BD, Controls).
+
 # Author: Sergio Pérez Oliveira
+
 # Description: This script performs descriptive comparisons across psychiatric 
 #              groups (SCZ, BD, Controls) and genotype frequency analyses for 
 #              HTT, ATXN1 and ATXN2 loci across subgroups (e.g., binary subtype, 
 #              DCO, controls). Analyses include demographic, clinical, lifestyle 
 #              variables and STR genotype distributions.
+
 # Inputs:
 #   - Manually selected environment file with custom functions (.R)
 #   - Manually selected data file to update DT, SCH_CONTROLES, BP_CONTROLES
 #   - Dataframes: DT, MENTAL, BD, SCH, SCH_CONTROLES, BP_CONTROLES
+
 # Outputs:
 #   - Descriptive statistics (mean ± SD, proportions)
 #   - Non-parametric tests (Wilcoxon, Kruskal-Wallis, Dunn)
@@ -36,6 +40,7 @@ mean_sd(DT, "PATHOLOGY", "AGE", "Age at death / last visit")
 kruskal.test(AGE ~ PATHOLOGY, data = DT)
 dunn <- dunnTest(DT$AGE ~ DT$PATHOLOGY, method = "holm")
 print(dunn, dunn.test.results = TRUE)
+pairwise.wilcox.test(x = DT$AGE, g = DT$PATHOLOGY, p.adjust.method = "holm")
 
 # Rank biserial effect sizes by pairwise comparison
 levels <- unique(DT$PATHOLOGY)
@@ -60,27 +65,42 @@ rowPercents(Table)
 my_function(Table)
 pairwise_fisher_test(Table, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
 
-# Coffee consumption ----
-coffee_tab <- TABLE(MENTAL, "PATHOLOGY", "COFFEE", "Coffee consumption by pathology")
-rowPercents(coffee_tab)
-my_function(coffee_tab)
-pairwise_fisher_test(coffee_tab, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
-
 # Smoking status ----
 smoking_tab <- TABLE(DT, "PATHOLOGY", "SMOKER", "Smoking by pathology")
 rowPercents(smoking_tab)
 my_function(smoking_tab)
 pairwise_fisher_test(smoking_tab, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
 
-# Cognitive decline in BD ----
+# Coffee consumption ----
+coffee_tab <- TABLE(MENTAL, "PATHOLOGY", "COFFEE", "Coffee consumption by pathology")
+rowPercents(coffee_tab)
+my_function(coffee_tab)
+pairwise_fisher_test(coffee_tab, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
+
+
+
+# Cognitive decline ----
+
 cd_tab <- table(BD$CD)
-round(prop.table(cd_tab) * 100, 2)
+cd_percent <- round(prop.table(cd_tab) * 100, 2)
 cd_tab
+cd_percent
+
 cd_bin_tab <- table(BD$CD_BINARY)
 round(prop.table(cd_bin_tab) * 100, 2)
 cd_bin_tab
 
+cd_tab <- table(SCH$CD)
+cd_percent <- round(prop.table(cd_tab) * 100, 2)
+cd_tab
+cd_percent
+
+cd_bin_tab <- table(SCH$CD_BINARY)
+round(prop.table(cd_bin_tab) * 100, 2)
+cd_bin_tab
+
 # Subtype of pathology ----
+
 subtype_tab <- table(BD$PATHOLOGY_TYPE)
 round(prop.table(subtype_tab) * 100, 2)
 subtype_tab

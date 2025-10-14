@@ -1,7 +1,8 @@
 # Script name: 07_Enrichr_KG.R
 # ==============================================================================
+# Title: miRNA target network visualization from Enrichr-KG datasets.
+
 # Author: Sergio Pérez Oliveira
-# Title: miRNA target network visualization from Enrichr-KG datasets
 
 # Description: This script loads and visualizes an interaction network of miRNAs and their target genes, 
 #              integrating enrichment results from multiple sources (e.g., GO, KEGG, DisGeNET). It provides 

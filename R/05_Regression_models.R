@@ -1,7 +1,9 @@
 # Script name: 05_Regression_models.R
 # ==============================================================================
-# Title: Psychiatric Disorder Risk and Age-of-Onset Regression Modeling
+# Title: Psychiatric Disorder Risk and Age-of-Onset Regression Modeling.
+
 # Author: Sergio Pérez Oliveira
+
 # Description: This script performs regression analyses to investigate:
 #              1) Association between STR genotypes (HTT, ATXN1, ATXN2) and:
 #                 - Risk of psychiatric disorders (BD, SCZ vs controls)
@@ -9,10 +11,12 @@
 #                 - Risk of cognitive deterioration (CD)
 #              2) Association between STRs and age-of-onset in psychiatric disorders
 #              Includes covariate adjustment, model selection, and effect size calculations.
+
 # Inputs:
 #   - Environment file with custom functions (manually selected)
 #   - Data file with preprocessed clinical/genetic data
 #   - Dataframes: DT, MENTAL, BD, SCH
+
 # Outputs:
 #   - Logistic regression models for disorder risk
 #   - Linear regression models for age-of-onset
@@ -25,24 +29,7 @@ source(Env_path)
 rm(Env_path)
 
 
-# MENTAL DISORDER RISK MODEL (Binomial) ----
-MENTAL$PATHOLOGY <- relevel(MENTAL$PATHOLOGY, ref = "BD")
-MLM <- select(MENTAL, -ONSET_AGE, -AGE, -DURATION, -PATHOLOGY_TYPE, -CD)
-
-# Full model
-model <- glm(PATHOLOGY ~ ., family = binomial, data = na.omit(MLM))
-summary(model)
-
-# Backward selection
-step(model, direction = "backward", trace = 0)
-
-# Final model
-mod <- glm(PATHOLOGY ~ SEX + SCA1_CODE + ALLELE2_SCA2 + SCA2_CODE, 
-           data = MLM, family = binomial)
-summary(mod)
-lrtest(mod)
-confint(mod)
-exp(coef(mod))
+# MENTAL DISORDER RISK MODEL----
 
 # Multinomial model (3 categories)
 DT$PATHOLOGY <- relevel(DT$PATHOLOGY, ref = "CONTROL")
@@ -60,7 +47,27 @@ summary(modelo_multi)
 z <- summary(modelo_multi)$coefficients / summary(modelo_multi)$standard.errors
 pvals <- 2 * (1 - pnorm(abs(z)))
 pvals
+exp(coef(modelo_multi))
+confint(modelo_multi)
 
+# Binomial model (2 categories)
+MENTAL$PATHOLOGY <- relevel(MENTAL$PATHOLOGY, ref = "BD")
+MLM <- select(MENTAL, -ONSET_AGE, -AGE, -DURATION, -PATHOLOGY_TYPE, -CD)
+
+# Full model 
+model <- glm(PATHOLOGY ~ ., family = binomial, data = na.omit(MLM))
+summary(model)
+
+# Backward selection
+step(model, direction = "backward", trace = 0)
+
+# Final model
+mod <- glm(PATHOLOGY ~ SEX + SCA1_CODE + ALLELE2_SCA2 + SCA2_CODE, 
+           data = MLM, family = binomial)
+summary(mod)
+lrtest(mod)
+confint(mod)
+exp(coef(mod))
 
 # HTT RISK MODEL ----
 DTLM <- MENTAL %>%
@@ -77,7 +84,7 @@ summary(model)
 step(model, direction = "backward", trace = 0)
 
 # Final model
-mod <- glm(PATHOLOGY ~ SEX + ALLELE2_HTT + I(ALLELE2_HTT^2), 
+mod <- glm(PATHOLOGY ~ SEX, 
            data = MENTAL, family = binomial)
 summary(mod)
 lrtest(mod)
@@ -92,7 +99,7 @@ model_nocov <- glm(PATHOLOGY ~ ALLELE1_HTT + I(ALLELE1_HTT^2) +
 summary(model_nocov)
 summary(step(model_nocov, direction = "backward", trace = 0))
 
-# Cognitive Deterioration (CD) model
+# Cognitive Deterioration (CD) model----
 BD$CD_BINARY <- relevel(BD$CD_BINARY, ref = "CD")
 BDLM <- BD %>%
   filter(!is.na(ALLELE1_HTT), !is.na(ALLELE2_HTT), !is.na(SEX), 
@@ -106,6 +113,20 @@ model_CD <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER +
 summary(model_CD)
 summary(step(model_CD, direction = "backward", trace = 0))
 
+SCH$CD_BINARY <- relevel(SCH$CD_BINARY, ref = "CD")
+SCHLM <- SCH %>%
+  filter(!is.na(ALLELE1_HTT), !is.na(ALLELE2_HTT), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
+
+model_CD <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER + 
+                  ALLELE1_HTT + I(ALLELE1_HTT^2) + 
+                  ALLELE2_HTT + I(ALLELE2_HTT^2) + 
+                  ALLELE1_HTT:ALLELE2_HTT,
+                data = SCHLM, family = binomial())
+summary(model_CD)
+summary(step(model_CD, direction = "backward", trace = 0))
+
+#Subtypes----
 # Bipolar Subtype
 BDLM <- BD %>%
   filter(!is.na(ALLELE1_HTT), !is.na(ALLELE2_HTT), !is.na(SEX), 
@@ -162,7 +183,7 @@ model_ATXN1_nocov <- glm(PATHOLOGY ~ ALLELE1_SCA1 + I(ALLELE1_SCA1^2) +
 summary(model_ATXN1_nocov)
 summary(step(model_ATXN1_nocov, direction = "backward", trace = 0))
 
-# Cognitive Deterioration (CD) model
+# Cognitive Deterioration (CD) model----
 BDLM_ATXN1 <- BD %>%
   filter(!is.na(ALLELE1_SCA1), !is.na(ALLELE2_SCA1), !is.na(SEX), 
          !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
@@ -175,6 +196,18 @@ model_CD_ATXN1 <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER +
 summary(model_CD_ATXN1)
 summary(step(model_CD_ATXN1, direction = "backward", trace = 0))
 
+SCHLM_ATXN1 <- SCH %>%
+  filter(!is.na(ALLELE1_SCA1), !is.na(ALLELE2_SCA1), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
+
+model_CD_ATXN1 <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER + 
+                        ALLELE1_SCA1 + I(ALLELE1_SCA1^2) + 
+                        ALLELE2_SCA1 + I(ALLELE2_SCA1^2) + 
+                        ALLELE1_SCA1:ALLELE2_SCA1,
+                      data = SCHLM_ATXN1, family = binomial())
+summary(model_CD_ATXN1)
+summary(step(model_CD_ATXN1, direction = "backward", trace = 0))
+#Subtypes----
 # Bipolar Subtype
 BDLM_ATXN1 <- BD %>%
   filter(!is.na(ALLELE1_SCA1), !is.na(ALLELE2_SCA1), !is.na(SEX), 
@@ -234,7 +267,7 @@ model_ATXN2_nocov <- glm(PATHOLOGY ~ ALLELE1_SCA2 + I(ALLELE1_SCA2^2) +
 summary(model_ATXN2_nocov)
 summary(step(model_ATXN2_nocov, direction = "backward", trace = 0))
 
-# Cognitive Deterioration (CD) model
+# Cognitive Deterioration (CD) model----
 BDLM_ATXN2 <- BD %>%
   filter(!is.na(ALLELE1_SCA2), !is.na(ALLELE2_SCA2), !is.na(SEX), 
          !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
@@ -247,6 +280,18 @@ model_CD_ATXN2 <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER +
 summary(model_CD_ATXN2)
 summary(step(model_CD_ATXN2, direction = "backward", trace = 0))
 
+SCHLM_ATXN2 <- SCH %>%
+  filter(!is.na(ALLELE1_SCA2), !is.na(ALLELE2_SCA2), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
+
+model_CD_ATXN2 <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER + 
+                        ALLELE1_SCA2 + I(ALLELE1_SCA2^2) + 
+                        ALLELE2_SCA2 + I(ALLELE2_SCA2^2) + 
+                        ALLELE1_SCA2:ALLELE2_SCA2,
+                      data = SCHLM_ATXN2, family = binomial())
+summary(model_CD_ATXN2)
+summary(step(model_CD_ATXN2, direction = "backward", trace = 0))
+#Subtypes----
 # Bipolar Subtype
 BDLM_ATXN2 <- BD %>%
   filter(!is.na(ALLELE1_SCA2), !is.na(ALLELE2_SCA2), !is.na(SEX), 
