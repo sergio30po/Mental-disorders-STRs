@@ -30,7 +30,7 @@ The project aims to evaluate the role of intermediate-length **CAG repeats** in 
 
 ### 📊 Statistical Analysis
 
-- All statistical analyses were performed using **R version 4.3.2**.
+- All statistical analyses were performed using **R version 4.4.3**.
 - Visualizations were generated using **R** and **GraphPad Prism version 10.0**.
 - A **p-value < 0.05** was considered statistically significant.
 - Effect sizes, regression models (binomial/multinomial), and multiple testing corrections were applied where appropriate.
