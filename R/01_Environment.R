@@ -212,7 +212,5 @@ write_xlsx(BD, path = "results/BD.xlsx")
 write_xlsx(SCH, path = "results/SCH.xlsx")
 write_xlsx(DT, path = "results/DT.xlsx")
 
-
-
 # Session info ----
 sessionInfo()

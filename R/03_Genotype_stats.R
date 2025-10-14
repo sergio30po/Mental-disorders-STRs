@@ -81,6 +81,5 @@ run_genotype_analysis(BD_CONTROLS, "CD_BINARY", "SCA2_CODE", "SCA2 vs DCO severi
 run_genotype_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA2_CODE", "SCA2 vs type of SCH", drop_cols = 3)
 run_genotype_analysis(SCH_CONTROLS, "CD_BINARY", "SCA2_CODE", "SCA2 vs DCO severity in SCH", drop_cols = 3)
 
-
 # Session info ----
 sessionInfo()
