@@ -6,14 +6,14 @@
 
 # Description: This script performs descriptive comparisons across psychiatric 
 #              groups (SCZ, BD, Controls) and genotype frequency analyses for 
-#              HTT, ATXN1 and ATXN2 loci across subgroups (e.g., binary subtype, 
-#              DCO, controls). Analyses include demographic, clinical, lifestyle 
+#              HTT, ATXN1 (SCA1) and ATXN2 (SCA2) loci across subgroups (e.g., binary subtype, 
+#              CD, controls). Analyses include demographic, clinical, lifestyle 
 #              variables and STR genotype distributions.
 
 # Inputs:
 #   - Manually selected environment file with custom functions (.R)
-#   - Manually selected data file to update DT, SCH_CONTROLES, BP_CONTROLES
-#   - Dataframes: DT, MENTAL, BD, SCH, SCH_CONTROLES, BP_CONTROLES
+#   - Manually selected data file to update DT, SCH_CONTROLES, BD_CONTROLES
+#   - Dataframes: DT, MENTAL, BD, SCH, SCH_CONTROLES, BD_CONTROLES
 
 # Outputs:
 #   - Descriptive statistics (mean ± SD, proportions)

@@ -1,0 +1,1335 @@
+---
+title: "Pipeline_Mental-disorders-STRs"
+author: "Sergio Pérez Oliveira"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    toc_depth: 3
+  pdf_document:
+    toc: true
+    number_sections: true
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exploring the role of CAG repeats in *HTT*, *ATXN1* and *ATXN2* genes in the genetic architecture of mental disorders: schizophrenia and bipolar disorder.
+
+The project aims to evaluate the role of intermediate-length **CAG repeats** in *HTT*, *ATXN1 (SCA1)*, and *ATXN2 (SCA2)* genes in the etiology of **schizophrenia (SCZ)** and **bipolar disorder (BD)**. We perform association analyses, regression models, and effect size calculations using R to investigate potential modifying roles of these STR loci in mental illness phenotypes.
+
+## 01_Environment.R
+
+Load and preprocess datasets for analysis of frequencies and correlations in mental disorder cohorts.
+
+```{r}
+required_packages <- c(
+  "pwr", "rcompanion","writexl", "FSA", "installr", "xlsx", "dplyr", "readxl", "ggplot2",
+  "corrplot", "devtools", "ggpubr", "lsr", "Rcmdr", "survival", "KMsurv",
+  "survMisc", "survminer", "ggfortify", "flexsurv", "actuar", "nortest",
+  "rstatix", "gtsummary", "car", "DataExplorer", "effectsize", "lmtest", 
+  "nnet","igraph","tidyverse","ggraph","tidygraph","visNetwork"
+)
+
+install_and_load <- function(packages) {
+  for (pkg in packages) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+      install.packages(pkg)
+    }
+    library(pkg, character.only = TRUE)
+  }
+}
+
+install_and_load(required_packages)
+
+# Input section ----
+# Select working directory interactively (select the main branch as directory)
+wd<-choose.dir()
+setwd<-wd
+cat("Please select Mental disorders dataset (Excel):\n")
+MENTAL <- read_excel(file.choose()) |> 
+  select(-1) |> 
+  select(-ADMISSION_AGE)
+
+cat("Please select Control dataset (Excel):\n")
+CONTROLS <- read_excel(file.choose())[-1, -1] |> 
+  rename(AGE = DEATH_AGE)
+
+# Functions ----
+
+# Function to calculate mean and SD by category
+mean_sd <- function(cohort, category, numeric_var, result_name) {
+  categories <- unique(cohort[[category]])
+  results <- data.frame()
+  for (c in categories) {
+    values <- na.omit(cohort[[numeric_var]][cohort[[category]] == c])
+    results <- rbind(results, data.frame(
+      CATEGORY = c,
+      MEAN = round(mean(values), 2),
+      SD = round(sd(values), 2)
+    ))
+  }
+  colnames(results) <- c(category, paste(result_name, "MEAN"), paste(result_name, "SD"))
+  return(results)
+}
+
+# Function to perform chi-square or Fisher's exact test with pairwise comparisons
+my_function <- function(matrix) {
+  chi_test <- chisq.test(matrix, correct = FALSE)
+  perc_expected <- sum(chi_test$expected < 5) / length(chi_test$expected)
+  
+  if (perc_expected > 0.2) {
+    fisher_test <- fisher.test(matrix)
+    print("Fisher's test results:")
+    print(fisher_test)
+    test_result <- fisher_test$p.value
+  } else {
+    print("Chi-square test results:")
+    print(chi_test)
+    test_result <- chi_test$p.value
+  }
+  
+  cat("\nMultiple comparisons:\n")
+  print(pairwiseNominalIndependence(matrix, fisher = TRUE, chisq = TRUE, method = "holm"))
+}
+
+# Frequency table printing function
+TABLE <- function(data, var1, var2, tableName) {
+  cat(paste0("\nFrequency table: ", tableName, "\n"))
+  table_mat <- xtabs(as.formula(paste("~", var1, "+", var2)), data = data)
+  table_mat <- as.matrix(table_mat)
+  table_mat[is.nan(table_mat)] <- 0
+  print(table_mat)
+}
+
+# Data preprocessing ----
+
+# Convert categorical variables to factors with labels
+convert_factors <- function(df, list_of_vars_and_labels) {
+  for (varname in names(list_of_vars_and_labels)) {
+    df[[varname]] <- factor(df[[varname]], labels = list_of_vars_and_labels[[varname]])
+  }
+  return(df)
+}
+
+MENTAL <- convert_factors(MENTAL, list(
+  PATHOLOGY = c("BD", "SCH"),
+  SEX = c("Male", "Female"),
+  HTT_CODE = c("NORMAL", "IA", "EXPANDED"),
+  SCA1_CODE = c("NORMAL", "IA"),
+  SCA2_CODE = c("NORMAL", "IA", "EXPANDED"),
+  COFFEE = c("Non-coffee", "Coffee"),
+  SMOKER = c("Smoking", "Non-smoking")
+))
+
+CONTROLS <- convert_factors(CONTROLS, list(
+  PATHOLOGY = "CONTROL",
+  SEX = c("Male", "Female"),
+  HTT_CODE = c("NORMAL", "IA", "EXPANDED"),
+  SCA1_CODE = c("NORMAL", "IA"),
+  SCA2_CODE = c("NORMAL", "IA"),
+  SMOKER = c("Smoking", "Non-smoking")
+))
+
+# Convert numeric variables
+to_numeric <- function(df, vars) {
+  df[vars] <- lapply(df[vars], as.numeric)
+  return(df)
+}
+
+MENTAL <- to_numeric(MENTAL, c("ALLELE1_HTT", "ALLELE2_HTT", "ALLELE1_SCA1", "ALLELE2_SCA1",
+                               "ALLELE1_SCA2", "ALLELE2_SCA2", "AGE", "ONSET_AGE", "DURATION"))
+
+CONTROLS <- to_numeric(CONTROLS, c("ALLELE1_HTT", "ALLELE2_HTT", "ALLELE1_SCA1", "ALLELE2_SCA1",
+                                   "ALLELE1_SCA2", "ALLELE2_SCA2", "AGE"))
+
+# Subsetting by pathology groups ----
+
+# Bipolar Disorder subset and transformations
+BD <- subset(MENTAL, PATHOLOGY == "BD")
+BD <- BD |> mutate(
+  CD = factor(CD, labels = c("NO", "MILD", "MODERATE", "SEVERE", "VERY-SEVERE")),
+  PATHOLOGY_TYPE = factor(PATHOLOGY_TYPE, labels = c("BD-I", "BD-II", "Cyclothymia", "Substance-related", "Other-BD")),
+  CD_BINARY = factor(ifelse(CD == "NO", "NO", "CD"), levels = c("NO", "CD")),
+  PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == "BD-I", "BD-I", "Other"), levels = c("BD-I", "Other"))
+)
+
+# Schizophrenia subset and transformations
+SCH <- subset(MENTAL, PATHOLOGY == "SCH")
+SCH <- SCH |> mutate(
+  PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == 1, "SCH", "Other"), levels = c("SCH", "Other")),
+  CD = factor(CD, labels = c("NO", "MILD", "MODERATE", "SEVERE")),
+  CD_BINARY = factor(ifelse(CD == "NO", "NO", "CD"), levels = c("NO", "CD"))
+)
+
+# Add binary pathology columns to controls
+CONTROLS$PATHOLOGY_TYPE_BINARY <- "CONTROL"
+CONTROLS$CD_BINARY <- "CONTROL"
+
+# Combine datasets ----
+
+DT <- bind_rows(
+  CONTROLS |> select(-CD_BINARY, -PATHOLOGY_TYPE_BINARY),
+  MENTAL |> select(-COFFEE, -CD, -PATHOLOGY_TYPE, -ONSET_AGE, -DURATION)
+)
+
+DT$PATHOLOGY <- as.factor(DT$PATHOLOGY)
+
+BD_CONTROLS <- bind_rows(
+  BD |> select(-COFFEE, -CD, -ONSET_AGE, -DURATION, -PATHOLOGY_TYPE),
+  CONTROLS
+)
+
+SCH_CONTROLS <- bind_rows(
+  SCH |> select(-COFFEE,-CD, -ONSET_AGE, -DURATION, -PATHOLOGY_TYPE),
+  CONTROLS
+)
+
+# Output section ----
+# Save processed datasets for downstream analyses
+if (!dir.exists("results")) {
+  dir.create("results")
+}
+
+saveRDS(BD, file = "results/BD.rds")
+saveRDS(SCH, file = "results/SCH.rds")
+saveRDS(DT, file = "results/DT.rds")
+
+# Save as XLSX
+write_xlsx(BD, path = "results/BD.xlsx")
+write_xlsx(SCH, path = "results/SCH.xlsx")
+write_xlsx(DT, path = "results/DT.xlsx")
+```
+
+## 02_Demographic_analysis.R
+
+This script performs descriptive comparisons across psychiatric groups (SCZ, BD, Controls) and genotype frequency analyses for *HTT*, *ATXN1* and *ATXN2* loci across subgroups (e.g., binary subtype, CD, controls). Analyses include demographic, clinical, lifestyle variables and STR genotype distributions.
+
+```{r}
+# Age at onset ----
+mean_sd(MENTAL, "PATHOLOGY", "ONSET_AGE", "Age at onset")
+wilcox.test(ONSET_AGE ~ PATHOLOGY, data = MENTAL, exact = TRUE)
+rank_biserial(ONSET_AGE ~ PATHOLOGY, data = MENTAL)
+
+# Age at death / last visit ----
+mean_sd(DT, "PATHOLOGY", "AGE", "Age at death / last visit")
+kruskal.test(AGE ~ PATHOLOGY, data = DT)
+dunn <- dunnTest(DT$AGE ~ DT$PATHOLOGY, method = "holm")
+print(dunn, dunn.test.results = TRUE)
+pairwise.wilcox.test(x = DT$AGE, g = DT$PATHOLOGY, p.adjust.method = "holm")
+
+# Rank biserial effect sizes by pairwise comparison
+levels <- unique(DT$PATHOLOGY)
+comparisons <- combn(levels, 2, simplify = FALSE)
+for (pair in comparisons) {
+  cat("\nComparison:", pair[1], "vs", pair[2], "\n")
+  sub_data <- subset(DT, PATHOLOGY %in% pair)
+  sub_data$PATHOLOGY <- factor(sub_data$PATHOLOGY, levels = pair)
+  print(rank_biserial(AGE ~ PATHOLOGY, data = sub_data))
+}
+
+# Disease duration ----
+mean_sd(MENTAL, "PATHOLOGY", "DURATION", "Disease duration")
+wilcox.test(DURATION ~ PATHOLOGY, data = MENTAL, exact = TRUE)
+pairwise.wilcox.test(x = MENTAL$DURATION, g = MENTAL$PATHOLOGY, p.adjust.method = "holm")
+rank_biserial(DURATION ~ PATHOLOGY, data = MENTAL)
+
+
+# Sex distribution ----
+Table <- TABLE(DT, "PATHOLOGY", "SEX", "Sex distribution")
+rowPercents(Table)
+my_function(Table)
+pairwise_fisher_test(Table, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
+
+# Smoking status ----
+smoking_tab <- TABLE(DT, "PATHOLOGY", "SMOKER", "Smoking by pathology")
+rowPercents(smoking_tab)
+my_function(smoking_tab)
+pairwise_fisher_test(smoking_tab, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
+
+# Coffee consumption ----
+coffee_tab <- TABLE(MENTAL, "PATHOLOGY", "COFFEE", "Coffee consumption by pathology")
+rowPercents(coffee_tab)
+my_function(coffee_tab)
+pairwise_fisher_test(coffee_tab, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
+
+
+
+# Cognitive decline ----
+
+cd_tab <- table(BD$CD)
+cd_percent <- round(prop.table(cd_tab) * 100, 2)
+cd_tab
+cd_percent
+
+cd_bin_tab <- table(BD$CD_BINARY)
+round(prop.table(cd_bin_tab) * 100, 2)
+cd_bin_tab
+
+cd_tab <- table(SCH$CD)
+cd_percent <- round(prop.table(cd_tab) * 100, 2)
+cd_tab
+cd_percent
+
+cd_bin_tab <- table(SCH$CD_BINARY)
+round(prop.table(cd_bin_tab) * 100, 2)
+cd_bin_tab
+
+# Subtype of pathology ----
+
+subtype_tab <- table(BD$PATHOLOGY_TYPE)
+round(prop.table(subtype_tab) * 100, 2)
+subtype_tab
+subtype_bin_tab <- table(BD$PATHOLOGY_TYPE_BINARY)
+round(prop.table(subtype_bin_tab) * 100, 2)
+subtype_bin_tab
+
+sch_type_tab <- table(SCH$PATHOLOGY_TYPE)
+round(prop.table(sch_type_tab) * 100, 2)
+sch_type_tab
+sch_type_bin_tab <- table(SCH$PATHOLOGY_TYPE_BINARY)
+round(prop.table(sch_type_bin_tab) * 100, 2)
+sch_type_bin_tab
+
+
+# Missing data ----
+DT %>%
+  group_by(PATHOLOGY) %>%
+  summarise(across(everything(), ~ sum(is.na(.))))
+
+MENTAL %>%
+  group_by(PATHOLOGY) %>%
+  summarise(across(everything(), ~ sum(is.na(.))))
+
+
+# Session info ----
+sessionInfo()
+```
+
+## 03_Genotype_stats.R
+
+This script performs genotype frequency comparisons across groups (SCZ, BD, Controls) for genes associated with neurodegenerative disorders: HTT, ATXN1 (SCA1), and ATXN2 (SCA2). The analysis includes global frequencies, intermediate alleles (IAs), expanded alleles, and subgroup comparisons by clinical subtype and severity (DCO).
+
+```{r}
+# Function to run genotype frequency analysis ----
+run_genotype_analysis <- function(data, group_col, genotype_col, label, drop_cols = NULL) {
+  tab <- TABLE(data, group_col, genotype_col, label)
+  print(rowPercents(tab))
+  res_misc <- my_function(tab)
+  fisher_res <- NULL
+  
+  if (is.null(drop_cols)) {
+    message("Pairwise Fisher skipped: requires 'drop_cols' with 2 categories.")
+  } else {
+    cols <- colnames(tab)
+    idx_drop <- if (is.numeric(drop_cols)) intersect(drop_cols, seq_along(cols)) else match(drop_cols, cols, nomatch = 0)
+    kept <- setdiff(seq_along(cols), idx_drop)
+    mat <- as.matrix(tab[, kept, drop = FALSE])
+    if (ncol(mat) == 2) {
+      pairwise_fisher_test(mat, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
+    } else {
+      message("Pairwise Fisher skipped: reduced table not equal to 2 categories.")
+    }
+  }
+}
+
+
+
+# HTT ANALYSIS =================
+run_genotype_analysis(DT, "PATHOLOGY", "HTT_CODE", "HTT: Main group comparison")
+run_genotype_analysis(DT, "PATHOLOGY", "HTT_CODE", "HTT: Intermediate alleles", drop_cols = 3)
+run_genotype_analysis(DT, "PATHOLOGY", "HTT_CODE", "HTT: Expanded alleles", drop_cols = 2)
+
+run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "HTT_CODE", "HTT vs type of BD", drop_cols = 3)
+run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "HTT_CODE", "HTT vs type of BD (expanded)", drop_cols = 2)
+
+run_genotype_analysis(BD_CONTROLS, "CD_BINARY", "HTT_CODE", "HTT vs DCO severity in BD", drop_cols = 3)
+run_genotype_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "HTT_CODE", "HTT vs type of SCH", drop_cols = 3)
+run_genotype_analysis(SCH_CONTROLS, "CD_BINARY", "HTT_CODE", "HTT vs DCO severity in SCH", drop_cols = 3)
+
+# ATXN1 (SCA1) ANALYSIS =================
+run_genotype_analysis(DT, "PATHOLOGY", "SCA1_CODE", "ATXN1: IA comparison")
+run_genotype_analysis(DT, "PATHOLOGY", "SCA1_CODE", "ATXN1: Intermediate alleles", drop_cols = 3)
+run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA1_CODE", "SCA1 vs type of BP", drop_cols = 3)
+run_genotype_analysis(BD_CONTROLS, "CD_BINARY", "SCA1_CODE", "SCA1 vs DCO severity in BP", drop_cols = 3)
+run_genotype_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA1_CODE", "SCA1 vs type of SCH", drop_cols = 3)
+run_genotype_analysis(SCH_CONTROLS, "CD_BINARY", "SCA1_CODE", "SCA1 vs DCO severity in SCH", drop_cols = 3)
+
+# ATXN2 (SCA2) ANALYSIS =================
+run_genotype_analysis(DT, "PATHOLOGY", "SCA2_CODE", "ATXN2: Main group comparison")
+run_genotype_analysis(DT, "PATHOLOGY", "SCA2_CODE", "ATXN2: Intermediate alleles", drop_cols = 3)
+run_genotype_analysis(DT, "PATHOLOGY", "SCA2_CODE", "ATXN2: Expanded alleles", drop_cols = 2)
+
+run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA2_CODE", "SCA2 vs type of BP", drop_cols = 3)
+run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA2_CODE", "SCA2 vs type of BD (expanded)", drop_cols = 2)
+
+run_genotype_analysis(BD_CONTROLS, "CD_BINARY", "SCA2_CODE", "SCA2 vs DCO severity in BP", drop_cols = 3)
+run_genotype_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA2_CODE", "SCA2 vs type of SCH", drop_cols = 3)
+run_genotype_analysis(SCH_CONTROLS, "CD_BINARY", "SCA2_CODE", "SCA2 vs DCO severity in SCH", drop_cols = 3)
+
+
+# Session info ----
+sessionInfo()
+```
+
+## 04_CAG_repeat_sizes.R
+
+This script performs non-parametric statistical analyses to compare CAG repeat lengths of both alleles in *HTT*, *ATXN1*, and *ATXN2* across diagnostic groups (SCZ, BD, Controls), as well as in clinically defined subgroups based on subtype and severity (DCO).
+
+The analysis includes:
+
+-   Descriptive statistics (mean and SD per group)
+
+-   Kruskal-Wallis test for global group differences
+
+-   Dunn and Wilcoxon pairwise post-hoc tests if significant
+
+-   Effect size estimation (Wilcoxon-based) for selected comparisons
+
+-   CAG repeat sizes and its percentages in the different cohorts.
+
+```{r}
+run_kruskal_analysis <- function(df, group_col, value_col, result_name = NULL, comparisons_list = NULL) {
+  # If result_name is not provided, use the name of value_col
+  if (is.null(result_name)) {
+    result_name <- value_col
+  }
+  
+  cat("\n--- Analysis for:", result_name, "---\n")
+  
+  # 1. Mean and standard deviation
+  cat("Mean and SD by group:\n")
+  mean_sd_result <- mean_sd(df, group_col, value_col, result_name = value_col)
+  print(mean_sd_result)
+  
+  # 2. Kruskal-Wallis test
+  cat("\nKruskal-Wallis test:\n")
+  kruskal <- kruskal.test(df[[value_col]] ~ df[[group_col]])
+  print(kruskal)
+  
+  # 3. If significant, perform post-hoc tests and effect size
+  if (kruskal$p.value < 0.05) {
+    cat("\nDunn's test (Holm correction):\n")
+    dunn_result <- FSA::dunnTest(df[[value_col]] ~ df[[group_col]], method = "holm")
+    print(dunn_result)
+    
+    cat("\nPairwise Wilcoxon test (Holm correction):\n")
+    wilcox_result <- pairwise.wilcox.test(df[[value_col]], df[[group_col]], p.adjust.method = "holm")
+    print(wilcox_result)
+    
+    # 4. Effect size using wilcox_effsize if comparisons provided
+    if (!is.null(comparisons_list)) {
+      cat("\nEffect size for selected comparisons:\n")
+      effsize <- df %>%
+        wilcox_effsize(as.formula(paste(value_col, "~", group_col)),
+                       paired = FALSE,
+                       comparisons = comparisons_list,
+                       p.adjust.method = "holm")
+      print(effsize)
+    } else {
+      cat("No specific comparisons provided for effect size.\n")
+    }
+  } else {
+    cat("\nKruskal-Wallis not significant; post-hoc tests and effect sizes are not performed.\n")
+  }
+}
+
+
+# HTT ANALYSIS ----
+
+### Long allele
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_HTT", "HTT long allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_HTT", "HTT long allele BD_CONTROLS - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_HTT", "HTT long allele BD_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_HTT", "HTT long allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_HTT", "HTT long allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+
+### Short allele
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_HTT", "HTT short allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_HTT", "HTT short allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_HTT", "HTT short allele BD_CONTROLES - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_HTT", "HTT short allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_HTT", "HTT short allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+
+# ATXN1 (SCA1) ANALYSIS ----
+
+### Long allele
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_SCA1", "SCA1 long allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA1", "SCA1 long allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_SCA1", "SCA1 long allele BD_CONTROLES - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA1", "SCA1 long allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_SCA1", "SCA1 long allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+
+### Short allele
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_SCA1", "SCA1 short allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA1", "SCA1 short allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_SCA1", "SCA1 short allele BD_CONTROLES - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA1", "SCA1 short allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_SCA1", "SCA1 short allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+
+# ATXN2 (SCA2) ANALYSIS ----
+
+### Long allele
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_SCA2", "SCA2 long allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA2", "SCA2 long allele BD_CONTROLES - Pathology type", list(c("BD-I","Other"), c("BD-I","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_SCA2", "SCA2 long allele BD_CONTROLES - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA2", "SCA2 long allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_SCA2", "SCA2 long allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+
+### Short allele
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_SCA2", "SCA2 short allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA2", "SCA2 short allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_SCA2", "SCA2 short allele BD_CONTROLES - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA2", "SCA2 short allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_SCA2", "SCA2 short allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+
+#CAG repeats frequencies among cohorts----
+library(dplyr)
+library(tidyr)
+library(rlang)
+
+allele_percentages_by_group <- function(
+    data,
+    group_var      = "PATHOLOGY",
+    allele_cols    = c("ALLELE1_HTT", "ALLELE2_HTT"),  # <- pass SCA1/SCA2 here when needed
+    group_to_show  = NULL,                              # e.g. "BD", "SCH", "CONTROL"
+    output         = c("long", "wide"),                 # output format
+    digits         = 2,
+    drop_na        = TRUE
+) {
+  output <- match.arg(output)
+  
+  # Check that all requested columns exist in the dataset
+  missing_cols <- setdiff(c(group_var, allele_cols), names(data))
+  if (length(missing_cols) > 0) {
+    stop("These columns were not found in 'data': ", paste(missing_cols, collapse = ", "))
+  }
+  
+  # Convert selected allele columns to long format
+  allele_long <- data %>%
+    select(all_of(group_var), all_of(allele_cols)) %>%
+    pivot_longer(
+      cols      = all_of(allele_cols),
+      names_to  = "ALLELE_COL",
+      values_to = "CAG_size"
+    )
+  
+  # Optionally remove rows with missing allele values
+  if (drop_na) {
+    allele_long <- allele_long %>% filter(!is.na(CAG_size))
+  }
+  
+  # Compute frequency and percentage by group and allele size
+  allele_freq <- allele_long %>%
+    group_by(across(all_of(group_var)), CAG_size) %>%
+    summarise(count = n(), .groups = "drop_last") %>%
+    mutate(
+      percentage = round(100 * count / sum(count), digits)  # % within each group
+    ) %>%
+    arrange(across(all_of(group_var)), CAG_size)
+  
+  # Optionally filter to show only one specific group
+  if (!is.null(group_to_show)) {
+    allele_freq <- allele_freq %>%
+      filter(!!sym(group_var) == group_to_show)
+  }
+  
+  # Return results in wide format if requested
+  if (output == "wide") {
+    res <- allele_freq %>%
+      select(all_of(group_var), CAG_size, percentage) %>%
+      pivot_wider(
+        names_from  = all_of(group_var),
+        values_from = percentage,
+        values_fill = 0
+      ) %>%
+      arrange(CAG_size)
+  } else {
+    res <- allele_freq
+  }
+  
+  # Print and return the result invisibly
+  print(res)
+  invisible(res)
+}
+
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_HTT", "ALLELE2_HTT"),  group_to_show = "CONTROL")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_HTT", "ALLELE2_HTT"),  group_to_show = "BD")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_HTT", "ALLELE2_HTT"),  group_to_show = "SCH")
+
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA1", "ALLELE2_SCA1"),  group_to_show = "CONTROL")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA1", "ALLELE2_SCA1"),  group_to_show = "BD")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA1", "ALLELE2_SCA1"),  group_to_show = "SCH")
+
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA2", "ALLELE2_SCA2"),  group_to_show = "CONTROL")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA2", "ALLELE2_SCA2"),  group_to_show = "BD")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA2", "ALLELE2_SCA2"),  group_to_show = "SCH")
+
+```
+
+## 05_Regression_models.R
+
+This script performs regression analyses to investigate:
+
+1)  Association between STR genotypes (*HTT*, *ATXN1*, *ATXN2*) and:
+
+\- Risk of psychiatric disorders (BD, SCZ vs controls)
+
+Risk of clinical subtypes (e.g., bipolar subtypes)
+
+\- Risk of cognitive deterioration (CD)
+
+2)  Association between STRs and age-of-onset in psychiatric disorders Includes covariate adjustment, model selection, and effect size calculations.
+
+```{r}
+# MENTAL DISORDER RISK MODEL----
+
+# Multinomial model (3 categories)
+DT$PATHOLOGY <- relevel(DT$PATHOLOGY, ref = "CONTROL")
+
+modelo_multi <- multinom(PATHOLOGY ~ ., data = na.omit(DT))
+summary(modelo_multi)
+step(modelo_multi, direction = "backward", trace = 0)
+
+modelo_multi <- multinom(PATHOLOGY ~ SEX + AGE + SMOKER + ALLELE2_SCA1 + 
+                           SCA1_CODE + ALLELE2_SCA2 + SCA2_CODE, 
+                         data = na.omit(DT))
+summary(modelo_multi)
+
+# Calculate p-values
+z <- summary(modelo_multi)$coefficients / summary(modelo_multi)$standard.errors
+pvals <- 2 * (1 - pnorm(abs(z)))
+pvals
+exp(coef(modelo_multi))
+confint(modelo_multi)
+
+# Binomial model (2 categories)
+MENTAL$PATHOLOGY <- relevel(MENTAL$PATHOLOGY, ref = "BD")
+MLM <- select(MENTAL, -ONSET_AGE, -AGE, -DURATION, -PATHOLOGY_TYPE, -CD)
+
+# Full model 
+model <- glm(PATHOLOGY ~ ., family = binomial, data = na.omit(MLM))
+summary(model)
+
+# Backward selection
+step(model, direction = "backward", trace = 0)
+
+# Final model
+mod <- glm(PATHOLOGY ~ SEX + SCA1_CODE + ALLELE2_SCA2 + SCA2_CODE, 
+           data = MLM, family = binomial)
+summary(mod)
+lrtest(mod)
+confint(mod)
+exp(coef(mod))
+
+# HTT RISK MODEL ----
+DTLM <- MENTAL %>%
+  filter(!is.na(ALLELE1_HTT), !is.na(ALLELE2_HTT), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER))
+
+# Full model with covariates
+model <- glm(PATHOLOGY ~ SEX + COFFEE + SMOKER + 
+               ALLELE1_HTT + I(ALLELE1_HTT^2) + 
+               ALLELE2_HTT + I(ALLELE2_HTT^2) + 
+               ALLELE1_HTT:ALLELE2_HTT,
+             data = DTLM, family = binomial)
+summary(model)
+step(model, direction = "backward", trace = 0)
+
+# Final model
+mod <- glm(PATHOLOGY ~ SEX, 
+           data = MENTAL, family = binomial)
+summary(mod)
+lrtest(mod)
+confint(mod)
+exp(coef(mod))
+
+# Model without covariates
+model_nocov <- glm(PATHOLOGY ~ ALLELE1_HTT + I(ALLELE1_HTT^2) + 
+                     ALLELE2_HTT + I(ALLELE2_HTT^2) + 
+                     ALLELE1_HTT:ALLELE2_HTT,
+                   data = DTLM, family = binomial)
+summary(model_nocov)
+summary(step(model_nocov, direction = "backward", trace = 0))
+
+# Cognitive Deterioration (CD) model----
+BD$CD_BINARY <- relevel(BD$CD_BINARY, ref = "CD")
+BDLM <- BD %>%
+  filter(!is.na(ALLELE1_HTT), !is.na(ALLELE2_HTT), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
+
+model_CD <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER + 
+                  ALLELE1_HTT + I(ALLELE1_HTT^2) + 
+                  ALLELE2_HTT + I(ALLELE2_HTT^2) + 
+                  ALLELE1_HTT:ALLELE2_HTT,
+                data = BDLM, family = binomial())
+summary(model_CD)
+summary(step(model_CD, direction = "backward", trace = 0))
+
+SCH$CD_BINARY <- relevel(SCH$CD_BINARY, ref = "CD")
+SCHLM <- SCH %>%
+  filter(!is.na(ALLELE1_HTT), !is.na(ALLELE2_HTT), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
+
+model_CD <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER + 
+                  ALLELE1_HTT + I(ALLELE1_HTT^2) + 
+                  ALLELE2_HTT + I(ALLELE2_HTT^2) + 
+                  ALLELE1_HTT:ALLELE2_HTT,
+                data = SCHLM, family = binomial())
+summary(model_CD)
+summary(step(model_CD, direction = "backward", trace = 0))
+
+#Subtypes----
+# Bipolar Subtype
+BDLM <- BD %>%
+  filter(!is.na(ALLELE1_HTT), !is.na(ALLELE2_HTT), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(PATHOLOGY_TYPE_BINARY))
+
+model_BD <- glm(PATHOLOGY_TYPE_BINARY ~ SEX + COFFEE + SMOKER + 
+                  ALLELE1_HTT + I(ALLELE1_HTT^2) + 
+                  ALLELE2_HTT + I(ALLELE2_HTT^2) + 
+                  ALLELE1_HTT:ALLELE2_HTT,
+                data = BDLM, family = binomial())
+summary(model_BD)
+summary(step(model_BD, direction = "backward", trace = 0))
+
+# Schizophrenia Subtype
+SCHLM <- SCH %>%
+  filter(!is.na(ALLELE1_HTT), !is.na(ALLELE2_HTT), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(PATHOLOGY_TYPE_BINARY))
+model_SCH <- glm(PATHOLOGY_TYPE_BINARY ~ ALLELE1_HTT + I(ALLELE1_HTT^2) + 
+                   ALLELE2_HTT + I(ALLELE2_HTT^2) + 
+                   ALLELE1_HTT:ALLELE2_HTT,
+                 data = SCHLM, family = binomial())
+summary(model_SCH)
+summary(step(model_SCH, direction = "backward", trace = 0))
+
+
+# ATXN1 RISK MODEL ----
+DTLM <- MENTAL %>%
+  filter(!is.na(ALLELE1_SCA1), !is.na(ALLELE2_SCA1), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER))
+
+# Full model with covariates
+model_ATXN1 <- glm(PATHOLOGY ~ SEX + COFFEE + SMOKER + 
+                     ALLELE1_SCA1 + I(ALLELE1_SCA1^2) + 
+                     ALLELE2_SCA1 + I(ALLELE2_SCA1^2) + 
+                     ALLELE1_SCA1:ALLELE2_SCA1,
+                   data = DTLM, family = binomial)
+summary(model_ATXN1)
+summary(step(model_ATXN1, direction = "backward", trace = 0))
+
+# Final model
+mod_ATXN1 <- glm(PATHOLOGY ~ SEX + ALLELE1_SCA1 + ALLELE2_SCA1 + 
+                   ALLELE1_SCA1:ALLELE2_SCA1, 
+                 data = MENTAL, family = binomial)
+summary(mod_ATXN1)
+lrtest(mod_ATXN1)
+confint(mod_ATXN1)
+exp(coef(mod_ATXN1))
+
+# Model without covariates
+model_ATXN1_nocov <- glm(PATHOLOGY ~ ALLELE1_SCA1 + I(ALLELE1_SCA1^2) + 
+                           ALLELE2_SCA1 + I(ALLELE2_SCA1^2) + 
+                           ALLELE1_SCA1:ALLELE2_SCA1,
+                         data = DTLM, family = binomial)
+summary(model_ATXN1_nocov)
+summary(step(model_ATXN1_nocov, direction = "backward", trace = 0))
+
+# Cognitive Deterioration (CD) model----
+BDLM_ATXN1 <- BD %>%
+  filter(!is.na(ALLELE1_SCA1), !is.na(ALLELE2_SCA1), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
+
+model_CD_ATXN1 <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER + 
+                        ALLELE1_SCA1 + I(ALLELE1_SCA1^2) + 
+                        ALLELE2_SCA1 + I(ALLELE2_SCA1^2) + 
+                        ALLELE1_SCA1:ALLELE2_SCA1,
+                      data = BDLM_ATXN1, family = binomial())
+summary(model_CD_ATXN1)
+summary(step(model_CD_ATXN1, direction = "backward", trace = 0))
+
+SCHLM_ATXN1 <- SCH %>%
+  filter(!is.na(ALLELE1_SCA1), !is.na(ALLELE2_SCA1), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
+
+model_CD_ATXN1 <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER + 
+                        ALLELE1_SCA1 + I(ALLELE1_SCA1^2) + 
+                        ALLELE2_SCA1 + I(ALLELE2_SCA1^2) + 
+                        ALLELE1_SCA1:ALLELE2_SCA1,
+                      data = SCHLM_ATXN1, family = binomial())
+summary(model_CD_ATXN1)
+summary(step(model_CD_ATXN1, direction = "backward", trace = 0))
+#Subtypes----
+# Bipolar Subtype
+BDLM_ATXN1 <- BD %>%
+  filter(!is.na(ALLELE1_SCA1), !is.na(ALLELE2_SCA1), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(PATHOLOGY_TYPE_BINARY))
+
+model_BD_ATXN1 <- glm(PATHOLOGY_TYPE_BINARY ~ SEX + COFFEE + SMOKER + 
+                        ALLELE1_SCA1 + I(ALLELE1_SCA1^2) + 
+                        ALLELE2_SCA1 + I(ALLELE2_SCA1^2) + 
+                        ALLELE1_SCA1:ALLELE2_SCA1,
+                      data = BDLM_ATXN1, family = binomial())
+summary(model_BD_ATXN1)
+summary(step(model_BD_ATXN1, direction = "backward", trace = 0))
+
+# Schizophrenia Subtype
+SCHLM_ATXN1 <- SCH %>%
+  filter(!is.na(ALLELE1_SCA1), !is.na(ALLELE2_SCA1), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(PATHOLOGY_TYPE_BINARY))
+
+model_SCH_ATXN1 <- glm(PATHOLOGY_TYPE_BINARY ~ SEX + COFFEE + SMOKER + 
+                         ALLELE1_SCA1 + I(ALLELE1_SCA1^2) + 
+                         ALLELE2_SCA1 + I(ALLELE2_SCA1^2) + 
+                         ALLELE1_SCA1:ALLELE2_SCA1,
+                       data = SCHLM_ATXN1, family = binomial())
+summary(model_SCH_ATXN1)
+summary(step(model_SCH_ATXN1, direction = "backward", trace = 0))
+
+
+# ATXN2 RISK MODEL ----
+DTLM_ATXN2 <- MENTAL %>%
+  filter(!is.na(ALLELE1_SCA2), !is.na(ALLELE2_SCA2), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER))
+
+# Full model with covariates
+model_ATXN2 <- glm(PATHOLOGY ~ SEX + COFFEE + SMOKER + 
+                     ALLELE1_SCA2 + I(ALLELE1_SCA2^2) + 
+                     ALLELE2_SCA2 + I(ALLELE2_SCA2^2) + 
+                     ALLELE1_SCA2:ALLELE2_SCA2,
+                   data = DTLM_ATXN2, family = binomial)
+summary(model_ATXN2)
+summary(step(model_ATXN2, direction = "backward", trace = 0))
+
+# Final model
+mod_ATXN2 <- glm(PATHOLOGY ~ SEX + ALLELE1_SCA2 + I(ALLELE1_SCA2^2) + 
+                   ALLELE2_SCA2 + I(ALLELE2_SCA2^2),
+                 data = MENTAL, family = binomial)
+summary(mod_ATXN2)
+lrtest(mod_ATXN2)
+confint(mod_ATXN2)
+exp(coef(mod_ATXN2))
+summary(step(mod_ATXN2, direction = "backward", trace = 0))
+
+# Model without covariates
+model_ATXN2_nocov <- glm(PATHOLOGY ~ ALLELE1_SCA2 + I(ALLELE1_SCA2^2) + 
+                           ALLELE2_SCA2 + I(ALLELE2_SCA2^2) + 
+                           ALLELE1_SCA2:ALLELE2_SCA2,
+                         data = DTLM_ATXN2, family = binomial)
+summary(model_ATXN2_nocov)
+summary(step(model_ATXN2_nocov, direction = "backward", trace = 0))
+
+# Cognitive Deterioration (CD) model----
+BDLM_ATXN2 <- BD %>%
+  filter(!is.na(ALLELE1_SCA2), !is.na(ALLELE2_SCA2), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
+
+model_CD_ATXN2 <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER + 
+                        ALLELE1_SCA2 + I(ALLELE1_SCA2^2) + 
+                        ALLELE2_SCA2 + I(ALLELE2_SCA2^2) + 
+                        ALLELE1_SCA2:ALLELE2_SCA2,
+                      data = BDLM_ATXN2, family = binomial())
+summary(model_CD_ATXN2)
+summary(step(model_CD_ATXN2, direction = "backward", trace = 0))
+
+SCHLM_ATXN2 <- SCH %>%
+  filter(!is.na(ALLELE1_SCA2), !is.na(ALLELE2_SCA2), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(CD_BINARY))
+
+model_CD_ATXN2 <- glm(CD_BINARY ~ SEX + COFFEE + SMOKER + 
+                        ALLELE1_SCA2 + I(ALLELE1_SCA2^2) + 
+                        ALLELE2_SCA2 + I(ALLELE2_SCA2^2) + 
+                        ALLELE1_SCA2:ALLELE2_SCA2,
+                      data = SCHLM_ATXN2, family = binomial())
+summary(model_CD_ATXN2)
+summary(step(model_CD_ATXN2, direction = "backward", trace = 0))
+#Subtypes----
+# Bipolar Subtype
+BDLM_ATXN2 <- BD %>%
+  filter(!is.na(ALLELE1_SCA2), !is.na(ALLELE2_SCA2), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(PATHOLOGY_TYPE_BINARY))
+
+model_BD_ATXN2 <- glm(PATHOLOGY_TYPE_BINARY ~ SEX + COFFEE + SMOKER + 
+                        ALLELE1_SCA2 + I(ALLELE1_SCA2^2) + 
+                        ALLELE2_SCA2 + I(ALLELE2_SCA2^2) + 
+                        ALLELE1_SCA2:ALLELE2_SCA2,
+                      data = BDLM_ATXN2, family = binomial())
+summary(model_BD_ATXN2)
+summary(step(model_BD_ATXN2, direction = "backward", trace = 0))
+
+# Schizophrenia Subtype
+SCHLM_ATXN2 <- SCH %>%
+  filter(!is.na(ALLELE1_SCA2), !is.na(ALLELE2_SCA2), !is.na(SEX), 
+         !is.na(COFFEE), !is.na(SMOKER), !is.na(PATHOLOGY_TYPE_BINARY))
+
+model_SCH_ATXN2 <- glm(PATHOLOGY_TYPE_BINARY ~ SEX + COFFEE + SMOKER + 
+                         ALLELE1_SCA2 + I(ALLELE1_SCA2^2) + 
+                         ALLELE2_SCA2 + I(ALLELE2_SCA2^2) + 
+                         ALLELE1_SCA2:ALLELE2_SCA2,
+                       data = SCHLM_ATXN2, family = binomial())
+summary(model_SCH_ATXN2)
+summary(step(model_SCH_ATXN2, direction = "backward", trace = 0))
+
+
+
+# ==============================================================================
+
+# AGE-ONSET MODELING ----
+
+
+# HTT and Age-of-Onset ----
+
+# Bipolar disorder
+model_onset_BD <- lm(ONSET_AGE ~ SEX + COFFEE + SMOKER + 
+                       ALLELE1_HTT + I(ALLELE1_HTT^2) + 
+                       ALLELE2_HTT + I(ALLELE2_HTT^2) + 
+                       ALLELE1_HTT:ALLELE2_HTT, 
+                     data = na.omit(BD))
+summary(model_onset_BD)
+summary(step(model_onset_BD, direction = "backward", trace = 0))
+
+# Schizophrenia
+model_onset_SCH <- lm(ONSET_AGE ~ SEX + COFFEE + SMOKER + 
+                        ALLELE1_HTT + I(ALLELE1_HTT^2) + 
+                        ALLELE2_HTT + I(ALLELE2_HTT^2) + 
+                        ALLELE1_HTT:ALLELE2_HTT, 
+                      data = na.omit(SCH))
+summary(model_onset_SCH)
+summary(step(model_onset_SCH, direction = "backward", trace = 0))
+
+# ATXN1 and Age-of-Onset ----
+
+# Bipolar Disorder
+model_onset_BD_ATXN1 <- lm(ONSET_AGE ~ SEX + COFFEE + SMOKER + 
+                             ALLELE1_SCA1 + I(ALLELE1_SCA1^2) + 
+                             ALLELE2_SCA1 + I(ALLELE2_SCA1^2) + 
+                             ALLELE1_SCA1:ALLELE2_SCA1,
+                           data = na.omit(BD))
+summary(model_onset_BD_ATXN1)
+summary(step(model_onset_BD_ATXN1, direction = "backward", trace = 0))
+
+# Schizophrenia
+model_onset_SCH_ATXN1 <- lm(ONSET_AGE ~ SEX + COFFEE + SMOKER + 
+                              ALLELE1_SCA1 + I(ALLELE1_SCA1^2) + 
+                              ALLELE2_SCA1 + I(ALLELE2_SCA1^2) + 
+                              ALLELE1_SCA1:ALLELE2_SCA1,
+                            data = na.omit(SCH))
+summary(model_onset_SCH_ATXN1)
+summary(step(model_onset_SCH_ATXN1, direction = "backward", trace = 0))
+
+
+# ATXN2 and Age-of-Onset ----
+
+# Bipolar Disorder
+model_onset_BD_ATXN2 <- lm(ONSET_AGE ~ SEX + COFFEE + SMOKER + 
+                             ALLELE1_SCA2 + I(ALLELE1_SCA2^2) + 
+                             ALLELE2_SCA2 + I(ALLELE2_SCA2^2) + 
+                             ALLELE1_SCA2:ALLELE2_SCA2,
+                           data = na.omit(BD))
+summary(model_onset_BD_ATXN2)
+summary(step(model_onset_BD_ATXN2, direction = "backward", trace = 0))
+
+# Schizophrenia
+model_onset_SCH_ATXN2 <- lm(ONSET_AGE ~ SEX + COFFEE + SMOKER + 
+                              ALLELE1_SCA2 + I(ALLELE1_SCA2^2) + 
+                              ALLELE2_SCA2 + I(ALLELE2_SCA2^2) + 
+                              ALLELE1_SCA2:ALLELE2_SCA2,
+                            data = na.omit(SCH))
+summary(model_onset_SCH_ATXN2)
+summary(step(model_onset_SCH_ATXN2, direction = "backward", trace = 0))
+```
+
+## 06_Survival_Age_analysis.R
+
+This script evaluates the association between STR-based genotype classifications (HTT_CODE, SCA1_CODE, SCA2_CODE) and clinical variables (age at onset, disease duration) in schizophrenia (SCH) and bipolar disorder (BD) patients. Analyses include subgroup comparisons within BD (e.g., BD-I, BD-CD) and survival models.
+
+```{r}
+# Subsetting by BD-I and CD
+BD_I <- subset(BD, BD$PATHOLOGY_TYPE_BINARY == "BD-I")
+BD_CD <- subset(BD, BD$CD_BINARY == "CD")
+BD_NOCD <- subset(BD, BD$CD_BINARY == "NO")
+
+# Subsetting by CD in SCH
+SCH_CD <- subset(SCH, SCH$CD_BINARY == "CD")
+SCH_NOCD <- subset(SCH, SCH$CD_BINARY == "NO")
+
+# AGE AT ONSET CORRELATIONS ----
+
+# BD - HTT
+mean_sd(BD, "HTT_CODE", "ONSET_AGE", "Age at onset BD")
+kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD)
+dunn <- dunnTest(BD$ONSET_AGE ~ BD$HTT_CODE, method = "holm")
+print(dunn, dunn.test.results = TRUE)
+
+mean_sd(BD_I, "HTT_CODE", "ONSET_AGE", "Age at onset BD-I")
+kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD_I)
+
+mean_sd(BD_CD, "HTT_CODE", "ONSET_AGE", "Age at onset BD-CD")
+kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD_CD)
+
+mean_sd(BD_NOCD, "HTT_CODE", "ONSET_AGE", "Age at onset BD-NO-CD")
+kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD_NOCD)
+
+# SCH - HTT
+mean_sd(SCH, "HTT_CODE", "ONSET_AGE", "Age at onset SCH")
+wilcox.test(ONSET_AGE ~ HTT_CODE, data = SCH)
+
+mean_sd(SCH_CD, "HTT_CODE", "ONSET_AGE", "Age at onset SCH_CD")
+kruskal.test(ONSET_AGE ~ HTT_CODE, data = SCH_CD)
+
+mean_sd(SCH_NOCD, "HTT_CODE", "ONSET_AGE", "Age at onset SCH_NOCD")
+kruskal.test(ONSET_AGE ~ HTT_CODE, data = SCH_NOCD)
+
+# BD - SCA1
+mean_sd(BD, "SCA1_CODE", "ONSET_AGE", "Age at onset BD")
+wilcox.test(ONSET_AGE ~ SCA1_CODE, data = BD)
+
+mean_sd(BD_I, "SCA1_CODE", "ONSET_AGE", "Age at onset BD-I")
+kruskal.test(ONSET_AGE ~ SCA1_CODE, data = BD_I)
+
+mean_sd(BD_CD, "SCA1_CODE", "ONSET_AGE", "Age at onset BD-CD")
+kruskal.test(ONSET_AGE ~ SCA1_CODE, data = BD_CD)
+
+mean_sd(BD_NOCD, "SCA1_CODE", "ONSET_AGE", "Age at onset BD-NO-CD")
+kruskal.test(ONSET_AGE ~ SCA1_CODE, data = BD_NOCD)
+
+# SCH - SCA1
+mean_sd(SCH, "SCA1_CODE", "ONSET_AGE", "Age at onset SCH")
+wilcox.test(ONSET_AGE ~ SCA1_CODE, data = SCH)
+
+mean_sd(SCH_CD, "SCA1_CODE", "ONSET_AGE", "Age at onset SCH_CD")
+kruskal.test(ONSET_AGE ~ SCA1_CODE, data = SCH_CD)
+
+mean_sd(SCH_NOCD, "SCA1_CODE", "ONSET_AGE", "Age at onset SCH_NOCD")
+kruskal.test(ONSET_AGE ~ SCA1_CODE, data = SCH_NOCD)
+
+# BD - SCA2
+mean_sd(BD, "SCA2_CODE", "ONSET_AGE", "Age at onset BD")
+wilcox.test(ONSET_AGE ~ SCA2_CODE, data = BD)
+
+mean_sd(BD_I, "SCA2_CODE", "ONSET_AGE", "Age at onset BD-I")
+wilcox.test(ONSET_AGE ~ SCA2_CODE, data = BD_I)
+
+mean_sd(BD_CD, "SCA2_CODE", "ONSET_AGE", "Age at onset BD-CD")
+wilcox.test(ONSET_AGE ~ SCA2_CODE, data = BD_CD)
+
+mean_sd(BD_NOCD, "SCA2_CODE", "ONSET_AGE", "Age at onset BD-NO-CD")
+kruskal.test(ONSET_AGE ~ SCA2_CODE, data = BD_NOCD)
+
+# SCH - SCA2
+mean_sd(SCH, "SCA2_CODE", "ONSET_AGE", "Age at onset SCH")
+kruskal.test(ONSET_AGE ~ SCA2_CODE, data = SCH)
+
+mean_sd(SCH_CD, "SCA2_CODE", "ONSET_AGE", "Age at onset SCH_CD")
+kruskal.test(ONSET_AGE ~ SCA2_CODE, data = SCH_CD)
+
+mean_sd(SCH_NOCD, "SCA2_CODE", "ONSET_AGE", "Age at onset SCH_NOCD")
+kruskal.test(ONSET_AGE ~ SCA2_CODE, data = SCH_NOCD)
+
+# DURATION CORRELATIONS ----
+
+# BD - HTT
+mean_sd(BD, "HTT_CODE", "DURATION", "Duration BD")
+kruskal.test(DURATION ~ HTT_CODE, data = BD)
+
+mean_sd(BD_I, "HTT_CODE", "DURATION", "Duration BD-I")
+kruskal.test(DURATION ~ HTT_CODE, data = BD_I)
+
+mean_sd(BD_CD, "HTT_CODE", "DURATION", "Duration BD-CD")
+kruskal.test(DURATION ~ HTT_CODE, data = BD_CD)
+
+mean_sd(BD_NOCD, "HTT_CODE", "DURATION", "Duration BD-NO-CD")
+kruskal.test(DURATION ~ HTT_CODE, data = BD_NOCD)
+
+# SCH - HTT
+mean_sd(SCH, "HTT_CODE", "DURATION", "Duration SCH")
+wilcox.test(DURATION ~ HTT_CODE, data = SCH)
+
+mean_sd(SCH_CD, "HTT_CODE", "DURATION", "Duration SCH-CD")
+kruskal.test(DURATION ~ HTT_CODE, data = SCH_CD)
+
+mean_sd(SCH_NOCD, "HTT_CODE", "DURATION", "Duration SCH-NO-CD")
+kruskal.test(DURATION ~ HTT_CODE, data = SCH_NOCD)
+
+# BD - SCA1
+mean_sd(BD, "SCA1_CODE", "DURATION", "Duration BD")
+wilcox.test(DURATION ~ SCA1_CODE, data = BD)
+
+mean_sd(BD_I, "SCA1_CODE", "DURATION", "Duration BD-I")
+kruskal.test(DURATION ~ SCA1_CODE, data = BD_I)
+
+mean_sd(BD_CD, "SCA1_CODE", "DURATION", "Duration BD-CD")
+kruskal.test(DURATION ~ SCA1_CODE, data = BD_CD)
+
+mean_sd(BD_NOCD, "SCA1_CODE", "DURATION", "Duration BD-NO-CD")
+kruskal.test(DURATION ~ SCA1_CODE, data = BD_NOCD)
+
+# SCH - SCA1
+mean_sd(SCH, "SCA1_CODE", "DURATION", "Duration SCH")
+wilcox.test(DURATION ~ SCA1_CODE, data = SCH)
+
+mean_sd(SCH_CD, "SCA1_CODE", "DURATION", "Duration SCH-CD")
+kruskal.test(DURATION ~ SCA1_CODE, data = SCH_CD)
+
+mean_sd(SCH_NOCD, "SCA1_CODE", "DURATION", "Duration SCH-NO-CD")
+kruskal.test(DURATION ~ SCA1_CODE, data = SCH_NOCD)
+
+# BD - SCA2
+mean_sd(BD, "SCA2_CODE", "DURATION", "Duration BD")
+wilcox.test(DURATION ~ SCA2_CODE, data = BD)
+
+mean_sd(BD_I, "SCA2_CODE", "DURATION", "Duration BD-I")
+wilcox.test(DURATION ~ SCA2_CODE, data = BD_I)
+
+mean_sd(BD_CD, "SCA2_CODE", "DURATION", "Duration BD-CD")
+wilcox.test(DURATION ~ SCA2_CODE, data = BD_CD)
+
+mean_sd(BD_NOCD, "SCA2_CODE", "DURATION", "Duration BD-NoCD")
+wilcox.test(DURATION ~ SCA2_CODE, data = BD_NOCD)
+
+# SCH - SCA2
+mean_sd(SCH, "SCA2_CODE", "DURATION", "Duration SCH")
+kruskal.test(DURATION ~ SCA2_CODE, data = SCH)
+
+mean_sd(SCH_CD, "SCA2_CODE", "DURATION", "Duration SCH-CD")
+kruskal.test(DURATION ~ SCA2_CODE, data = SCH_CD)
+
+mean_sd(SCH_NOCD, "SCA2_CODE", "DURATION", "Duration SCH-NO-CD")
+kruskal.test(DURATION ~ SCA2_CODE, data = SCH_NOCD)
+
+# SURVIVAL CURVES ----
+
+# BD
+surv_object <- Surv(time = BD$DURATION, event = rep(1, length(BD$DURATION)))
+cox_model <- coxph(surv_object ~ SEX + SMOKER + SCA2_CODE + HTT_CODE, data = BD)
+summary(cox_model)
+
+survdiff(surv_object ~ COFFEE, data = BD, rho = 0)
+survdiff(surv_object ~ SEX, data = BD, rho = 0)
+survdiff(surv_object ~ SMOKER, data = BD, rho = 0)
+survdiff(surv_object ~ SCA2_CODE, data = BD, rho = 0)
+cox_model <- coxph(surv_object ~ SCA2_CODE, data = BD)
+summary(cox_model)
+survdiff(surv_object ~ HTT_CODE, data = BD, rho = 0)
+survdiff(surv_object ~ SCA1_CODE, data = BD, rho = 0)
+
+surv_object <- Surv(time = BD_NOCD$DURATION, event = rep(1, length(BD_NOCD$DURATION)))
+survdiff(surv_object ~ SCA2_CODE, data = BD_NOCD, rho = 0)
+survdiff(surv_object ~ HTT_CODE, data = BD_NOCD, rho = 0)
+survdiff(surv_object ~ SCA1_CODE, data = BD_NOCD, rho = 0)
+
+surv_object <- Surv(time = BD_CD$DURATION, event = rep(1, length(BD_CD$DURATION)))
+survdiff(surv_object ~ SCA2_CODE, data = BD_CD, rho = 0)
+cox_model <- coxph(surv_object ~ SCA2_CODE, data = BD_CD)
+summary(cox_model)
+survdiff(surv_object ~ HTT_CODE, data = BD_CD, rho = 0)
+survdiff(surv_object ~ SCA1_CODE, data = BD_CD, rho = 0)
+
+surv_object <- Surv(time = BD$DURATION, event = rep(1, length(BD$DURATION)))
+gen.km <- survfit(surv_object ~ SCA2_CODE, data = BD, type = "kaplan-meier", error = "tsiatis", conf.type = "log-log", conf.int = 0.95)
+plot_km <- ggsurvplot(
+  fit = gen.km,
+  data = BD,
+  conf.int = TRUE,
+  pval = TRUE,
+  risk.table = TRUE,
+  title = "ATXN2 Kaplan-Meier Curve in BD",
+  xlab = "Time (years)",
+  ylab = "Survival probability",
+  legend.title = "ATXN2 Genotype",
+  legend.labs = c("Normal", "IAs")
+)
+print(plot_km)
+
+# SCH
+surv_object <- Surv(time = SCH$DURATION, event = rep(1, length(SCH$DURATION)))
+cox_model <- coxph(surv_object ~ SEX + SMOKER + SCA2_CODE + HTT_CODE, data = SCH)
+summary(cox_model)
+
+survdiff(surv_object ~ SEX, data = SCH, rho = 0)
+survdiff(surv_object ~ SMOKER, data = SCH, rho = 0)
+survdiff(surv_object ~ SCA2_CODE, data = SCH, rho = 0)
+survdiff(surv_object ~ HTT_CODE, data = SCH, rho = 0)
+survdiff(surv_object ~ SCA1_CODE, data = SCH, rho = 0)
+
+surv_object <- Surv(time = SCH_NOCD$DURATION, event = rep(1, length(SCH_NOCD$DURATION)))
+survdiff(surv_object ~ SCA2_CODE, data = SCH_NOCD, rho = 0)
+survdiff(surv_object ~ HTT_CODE, data = SCH_NOCD, rho = 0)
+survdiff(surv_object ~ SCA1_CODE, data = SCH_NOCD, rho = 0)
+
+surv_object <- Surv(time = SCH_CD$DURATION, event = rep(1, length(SCH_CD$DURATION)))
+survdiff(surv_object ~ SCA2_CODE, data = SCH_CD, rho = 0)
+survdiff(surv_object ~ HTT_CODE, data = SCH_CD, rho = 0)
+survdiff(surv_object ~ SCA1_CODE, data = SCH_CD, rho = 0)
+```
+
+## 07_Enrichr-KG
+
+This script loads and visualizes an interaction network of miRNAs and their target genes, integrating enrichment results from multiple sources (e.g., GO, KEGG, DisGeNET). It provides both an overview of the full network and a filtered subnetwork focusing on *HTT*, *ATXN1*, and *ATXN2* and their immediate neighbors. Nodes are annotated and colored by source, and the network is visualized using both static and interactive layouts with `visNetwork`.
+
+```{r}
+nodes <- read.delim(file.choose())   # Select your nodes file
+edges <- read.delim(file.choose())   # Select your edges file
+
+head(nodes)
+head(edges)
+
+# Initial visualization with visNetwork ----
+
+# Prepare nodes for visNetwork
+nodes_vis <- nodes[, c("id", "label", "kind", "color")]
+nodes_vis$color <- ifelse(is.na(nodes_vis$color), "gray", nodes_vis$color)  # default to gray if missing
+
+# Prepare edges for visNetwork
+edges_vis <- edges
+colnames(edges_vis)[colnames(edges_vis) == "source"] <- "from"
+colnames(edges_vis)[colnames(edges_vis) == "target"] <- "to"
+edges_vis$title <- edges_vis$relation  # shows relation on hover
+
+# Plot interactive network
+visNetwork(nodes_vis, edges_vis) %>%
+  visPhysics(
+    solver = "forceAtlas2Based",
+    forceAtlas2Based = list(gravitationalConstant = -150),
+    stabilization = list(enabled = TRUE, iterations = 1000),
+    minVelocity = 0.1
+  ) %>%
+  visNodes(   
+    color = list(border = "black", background = nodes_vis$color, highlight = "yellow"),
+    font = list(size = 16, face = "bold", vadjust = 0),
+    scaling = list(min = 10, max = 30)
+  ) %>%
+  visEdges(smooth = FALSE) %>%
+  visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) %>%
+  visLayout(randomSeed = 123)
+
+# Highlight target genes (HTT, ATXN1, ATXN2) ----
+
+# Step 1: define target genes and color for each
+target_genes <- c("HTT", "ATXN1", "ATXN2")
+target_colors <- c("HTT" = "red", "ATXN1" = "blue", "ATXN2" = "green")
+
+# Step 2: get IDs of the target nodes
+target_node_ids <- nodes_vis$id[nodes_vis$label %in% target_genes]
+
+# Step 3: initialize edge and node styles
+edges_vis$color <- "gray"
+edges_vis$width <- 1
+edges_vis$dashes <- FALSE
+nodes_vis$color_current <- nodes_vis$color
+
+# Step 4: update color and width for each target gene
+for (gene in target_genes) {
+  gene_id <- nodes_vis$id[nodes_vis$label == gene]
+  
+  # Update node color
+  nodes_vis$color_current[nodes_vis$id == gene_id] <- target_colors[gene]
+  
+  # Update edges connected to this gene
+  idx_edges <- which(edges_vis$from == gene_id | edges_vis$to == gene_id)
+  edges_vis$color[idx_edges] <- target_colors[gene]
+  edges_vis$width[idx_edges] <- 3
+}
+
+# Step 5: visualize with updated styles
+visNetwork(nodes_vis, edges_vis) %>%
+  visPhysics(
+    solver = "forceAtlas2Based",
+    forceAtlas2Based = list(gravitationalConstant = -150),
+    stabilization = TRUE
+  ) %>%
+  visNodes(
+    color = list(border = "black", background = nodes_vis$color_current),
+    font = list(size = 16, face = "bold", vadjust = 0, align = "center"),
+    scaling = list(min = 10, max = 40)
+  ) %>%
+  visEdges(smooth = FALSE) %>%
+  visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) %>%
+  visLayout(randomSeed = 123)
+
+
+# Filter network to target genes and neighbors ----
+
+# Rename columns to match igraph requirements
+colnames(edges)[1:2] <- c("from", "to")
+colnames(nodes)[1] <- "id"
+
+# Create full graph
+graph <- graph_from_data_frame(d = edges, vertices = nodes, directed = TRUE)
+
+# Assign labels
+V(graph)$label <- nodes$label[match(V(graph)$name, nodes$id)]
+
+# Select target genes
+target_nodes <- V(graph)[V(graph)$label %in% target_genes]
+
+# Get 1st-degree neighbors (ego network)
+neighbors <- ego(graph, order = 1, nodes = target_nodes, mode = "all")
+included_nodes <- unique(unlist(neighbors))
+subgraph <- induced_subgraph(graph, vids = included_nodes)
+
+# Assign labels in the subgraph
+V(subgraph)$label <- V(graph)$label[match(V(subgraph)$name, V(graph)$name)]
+
+
+# Assign colors by node type ----
+
+# Define color palette
+node_types <- unique(V(subgraph)$kind)
+palette_colors <- c(
+  "DisGeNET"                            = "#D2DB7D",
+  "GO Biological Process 2021"          = "#FFBAFB",
+  "Gene"                                = "#C5E1A5",
+  "Human Phenotype Ontology"            = "#B6D7FF",
+  "KEGG 2021 Human"                     = "#E9E7F0",
+  "MGI Mammalian Phenotype Level 4 2021"= "#FF9600"
+)
+
+# Prepare subgraph nodes
+sub_nodes <- data.frame(
+  id = V(subgraph)$name,
+  label = V(subgraph)$label,
+  kind = V(subgraph)$kind,
+  color = palette_colors[V(subgraph)$kind],
+  stringsAsFactors = FALSE
+)
+
+# Prepare subgraph edges
+sub_edges <- igraph::as_data_frame(subgraph, what = "edges")
+
+# Add legend for node types ----
+
+legend_nodes <- data.frame(
+  label = names(palette_colors),
+  shape = "dot",
+  color = unname(palette_colors),
+  size = 15,
+  stringsAsFactors = FALSE
+)
+
+# Simplify legend labels
+legend_nodes$label <- c("DisGeNET", "GO BP", "Gene", "HP", "KEGG", "MP")
+
+
+# Final visualization of subgraph ----
+
+visNetwork(sub_nodes, sub_edges) %>%
+  visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) %>%
+  visNodes(
+    color = list(border = "black", background = sub_nodes$color, highlight = "yellow"),
+    borderWidth = 1,
+    font = list(face = "bold")
+  ) %>%
+  visLayout(randomSeed = 123) %>%
+  visPhysics(enabled = FALSE) %>%
+  visLegend(
+    useGroups = FALSE,
+    addNodes = legend_nodes,
+    position = "left"
+  )
+```

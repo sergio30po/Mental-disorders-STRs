@@ -205,7 +205,5 @@ allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA2", "ALLELE2_SCA2")
 allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA2", "ALLELE2_SCA2"),  group_to_show = "SCH")
 
 
-
-
 # Session info ----
 sessionInfo()

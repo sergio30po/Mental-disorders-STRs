@@ -187,3 +187,6 @@ visNetwork(sub_nodes, sub_edges) %>%
     addNodes = legend_nodes,
     position = "left"
   )
+
+# Session info ----
+sessionInfo()
