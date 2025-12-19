@@ -7,18 +7,34 @@ This repository contains the analysis code for the scientific study titled:
 ### 📋 Authors
 
 - Sergio Pérez-Oliveira<sup>1,2,3</sup>
-- Olaya Fernández-Álvarez<sup>7</sup>
-- Manuel Menéndez-González
-- Paz García-Portilla<sup>4,5,6</sup>
-- Victoria Álvarez<sup>1,3</sup>
+- Olaya Fernández-Álvarez<sup>4</sup>
+- Manuel Menéndez-González<sup>1,5,6</sup>
+- Pilar Sierra<sup>7,8,9</sup>
+- Belén Arranz<sup>10</sup>
+- Gemma Safont<sup>11</sup>
+- Pablo García-González<sup>12</sup>
+- Maitee Rosende-Roca<sup>12,13</sup>
+- Mercè Boada<sup>12,13</sup>
+- Agustín Ruiz<sup>12,13</sup>
+- Paz García-Portilla<sup>1,14,15,16</sup>
+- Victoria Álvarez<sup>1,3,15</sup>
 
-<sup>1</sup> Instituto de Investigación Sanitaria del Principado de Asturias (ISPA)  
-<sup>2</sup> Programa de Doctorado en Biomedicina y Oncología Molecular, Universidad de Oviedo  
-<sup>3</sup> Servicio de Neurología, Hospital Universitario Central de Asturias  
-<sup>4</sup> Departamento de Psiquiatría, Universidad de Oviedo  
-<sup>5</sup> CIBERSAM  
-<sup>6</sup> Área de Salud Mental, Hospital Universitario Central de Asturias  
-<sup>7</sup> Unidad de Análisis Bioinformático, Universidad de Oviedo
+1 Health Research Institute of the Principality of Asturias (ISPA), Oviedo, Spain
+2 University of Oviedo, Oviedo, Spain
+3 Genetics Laboratory, Central University Hospital of Asturias (HUCA), Oviedo, Spain
+4 Asociación Parkinson Asturias (APARKAS), Oviedo, Spain
+5 Department of Neurology, Central University Hospital of Asturias (HUCA), Oviedo, Spain
+6 Department of Medicine, University of Oviedo, Oviedo, Spain
+7 Department of Psychiatry and Psychology, La Fe University and Polytechnic Hospital, Valencia, Spain
+8 Department of Medicine, University of Valencia, Valencia, Spain
+9 Mental Health Research Group, La Fe Health Research Institute, Valencia, Spain
+10 Parc Sanitari Sant Joan de Déu; CIBERSAM, Barcelona, Spain
+11 Psychiatry Department, Hospital Universitari Mútua Terrassa, Barcelona; ISIC Medical Center, Barcelona; Universitat de Barcelona; CIBERSAM
+12 Ace Alzheimer Center Barcelona, Universitat Internacional de Catalunya, 08028 Barcelona, Spain
+13 Networking Research Center on Neurodegenerative Diseases (CIBERNED), Instituto de Salud Carlos III, 28029 Madrid, Spain
+14 Department of Psychiatry, University of Oviedo, Oviedo, Spain
+15 Health Service of the Principality of Asturias (SESPA), Oviedo, Spain
+16 Biomedical Research Networking Center in Mental Health (CIBERSAM), Oviedo, Spain
 
 ---
 

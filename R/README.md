@@ -38,4 +38,4 @@ Main R packages used across scripts include:
 ---
 
 **Author:** Sergio Pérez-Oliveira  
-**Last update:** October 2025
+**Last update:** December 2025

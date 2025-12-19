@@ -34,4 +34,4 @@ Clinical and genetic variables are included solely for research reproducibility.
 ---
 
 **Author:** Sergio Pérez-Oliveira  
-**Last update:** October 2025
+**Last update:** December 2025
