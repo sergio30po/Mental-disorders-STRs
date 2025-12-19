@@ -32,11 +32,12 @@ rm(Env_path)
 # Subsetting by BD-I and CD
 BD_I <- subset(BD, BD$PATHOLOGY_TYPE_BINARY == "BD-I")
 BD_CD <- subset(BD, BD$CD_BINARY == "CD")
-BD_NOCD <- subset(BD, BD$CD_BINARY == "NO")
+BD_NOCD <- subset(BD, BD$CD_BINARY == "No-CD")
 
 # Subsetting by CD in SCH
+SCH_P <- subset(SCH, SCH$PATHOLOGY_TYPE_BINARY == "SCH")
 SCH_CD <- subset(SCH, SCH$CD_BINARY == "CD")
-SCH_NOCD <- subset(SCH, SCH$CD_BINARY == "NO")
+SCH_NOCD <- subset(SCH, SCH$CD_BINARY == "No-CD")
 
 # AGE AT ONSET CORRELATIONS ----
 
@@ -48,6 +49,8 @@ print(dunn, dunn.test.results = TRUE)
 
 mean_sd(BD_I, "HTT_CODE", "ONSET_AGE", "Age at onset BD-I")
 kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD_I)
+dunn <- dunnTest(BD_I$ONSET_AGE ~ BD_I$HTT_CODE, method = "holm")
+print(dunn, dunn.test.results = TRUE)
 
 mean_sd(BD_CD, "HTT_CODE", "ONSET_AGE", "Age at onset BD-CD")
 kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD_CD)
@@ -58,6 +61,9 @@ kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD_NOCD)
 # SCH - HTT
 mean_sd(SCH, "HTT_CODE", "ONSET_AGE", "Age at onset SCH")
 wilcox.test(ONSET_AGE ~ HTT_CODE, data = SCH)
+
+mean_sd(SCH_P, "HTT_CODE", "ONSET_AGE", "Age at onset SCH_P")
+kruskal.test(ONSET_AGE ~ HTT_CODE, data = SCH_P)
 
 mean_sd(SCH_CD, "HTT_CODE", "ONSET_AGE", "Age at onset SCH_CD")
 kruskal.test(ONSET_AGE ~ HTT_CODE, data = SCH_CD)
@@ -82,6 +88,9 @@ kruskal.test(ONSET_AGE ~ SCA1_CODE, data = BD_NOCD)
 mean_sd(SCH, "SCA1_CODE", "ONSET_AGE", "Age at onset SCH")
 wilcox.test(ONSET_AGE ~ SCA1_CODE, data = SCH)
 
+mean_sd(SCH_P, "SCA1_CODE", "ONSET_AGE", "Age at onset SCH_P")
+kruskal.test(ONSET_AGE ~ SCA1_CODE, data = SCH_P)
+
 mean_sd(SCH_CD, "SCA1_CODE", "ONSET_AGE", "Age at onset SCH_CD")
 kruskal.test(ONSET_AGE ~ SCA1_CODE, data = SCH_CD)
 
@@ -104,6 +113,9 @@ kruskal.test(ONSET_AGE ~ SCA2_CODE, data = BD_NOCD)
 # SCH - SCA2
 mean_sd(SCH, "SCA2_CODE", "ONSET_AGE", "Age at onset SCH")
 kruskal.test(ONSET_AGE ~ SCA2_CODE, data = SCH)
+
+mean_sd(SCH_P, "SCA2_CODE", "ONSET_AGE", "Age at onset SCH_P")
+kruskal.test(ONSET_AGE ~ SCA2_CODE, data = SCH_P)
 
 mean_sd(SCH_CD, "SCA2_CODE", "ONSET_AGE", "Age at onset SCH_CD")
 kruskal.test(ONSET_AGE ~ SCA2_CODE, data = SCH_CD)
@@ -130,6 +142,9 @@ kruskal.test(DURATION ~ HTT_CODE, data = BD_NOCD)
 mean_sd(SCH, "HTT_CODE", "DURATION", "Duration SCH")
 wilcox.test(DURATION ~ HTT_CODE, data = SCH)
 
+mean_sd(SCH_P, "HTT_CODE", "DURATION", "Duration SCH_P")
+kruskal.test(DURATION ~ HTT_CODE, data = SCH_P)
+
 mean_sd(SCH_CD, "HTT_CODE", "DURATION", "Duration SCH-CD")
 kruskal.test(DURATION ~ HTT_CODE, data = SCH_CD)
 
@@ -152,6 +167,9 @@ kruskal.test(DURATION ~ SCA1_CODE, data = BD_NOCD)
 # SCH - SCA1
 mean_sd(SCH, "SCA1_CODE", "DURATION", "Duration SCH")
 wilcox.test(DURATION ~ SCA1_CODE, data = SCH)
+
+mean_sd(SCH_P, "SCA1_CODE", "DURATION", "Duration SCH_P")
+kruskal.test(DURATION ~ SCA1_CODE, data = SCH_P)
 
 mean_sd(SCH_CD, "SCA1_CODE", "DURATION", "Duration SCH-CD")
 kruskal.test(DURATION ~ SCA1_CODE, data = SCH_CD)
@@ -176,17 +194,19 @@ wilcox.test(DURATION ~ SCA2_CODE, data = BD_NOCD)
 mean_sd(SCH, "SCA2_CODE", "DURATION", "Duration SCH")
 kruskal.test(DURATION ~ SCA2_CODE, data = SCH)
 
+mean_sd(SCH_P, "SCA2_CODE", "DURATION", "Duration SCH_P")
+kruskal.test(DURATION ~ SCA2_CODE, data = SCH_P)
+
 mean_sd(SCH_CD, "SCA2_CODE", "DURATION", "Duration SCH-CD")
 kruskal.test(DURATION ~ SCA2_CODE, data = SCH_CD)
 
 mean_sd(SCH_NOCD, "SCA2_CODE", "DURATION", "Duration SCH-NO-CD")
-kruskal.test(DURATION ~ SCA2_CODE, data = SCH_NOCD)
 
 # SURVIVAL CURVES ----
 
 # BD
 surv_object <- Surv(time = BD$DURATION, event = rep(1, length(BD$DURATION)))
-cox_model <- coxph(surv_object ~ SEX + SMOKER + SCA2_CODE + HTT_CODE, data = BD)
+cox_model <- coxph(surv_object ~ SEX + SMOKER + SCA2_CODE + HTT_CODE + SCA1_CODE, data = BD)
 summary(cox_model)
 
 survdiff(surv_object ~ COFFEE, data = BD, rho = 0)
@@ -226,9 +246,25 @@ plot_km <- ggsurvplot(
 )
 print(plot_km)
 
+surv_object <- Surv(time = BD_CD$DURATION, event = rep(1, length(BD_CD$DURATION)))
+gen.km <- survfit(surv_object ~ SCA2_CODE, data = BD_CD, type = "kaplan-meier", error = "tsiatis", conf.type = "log-log", conf.int = 0.95)
+plot_km <- ggsurvplot(
+  fit = gen.km,
+  data = BD_CD,
+  conf.int = TRUE,
+  pval = TRUE,
+  risk.table = TRUE,
+  title = "ATXN2 Kaplan-Meier Curve in BD_CD",
+  xlab = "Time (years)",
+  ylab = "Survival probability",
+  legend.title = "ATXN2 Genotype",
+  legend.labs = c("Normal", "IAs")
+)
+print(plot_km)
+
 # SCH
 surv_object <- Surv(time = SCH$DURATION, event = rep(1, length(SCH$DURATION)))
-cox_model <- coxph(surv_object ~ SEX + SMOKER + SCA2_CODE + HTT_CODE, data = SCH)
+cox_model <- coxph(surv_object ~ SEX + SMOKER + SCA2_CODE + HTT_CODE + SCA1_CODE, data = SCH)
 summary(cox_model)
 
 survdiff(surv_object ~ SEX, data = SCH, rho = 0)

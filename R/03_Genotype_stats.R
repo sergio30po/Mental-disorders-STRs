@@ -12,7 +12,7 @@
 
 # Inputs:
 #   - Manually selected environment file with custom functions (.R)
-#   - Dataframes: DT (full dataset), BP_CONTROLES, SCH_CONTROLES
+#   - Dataframes: DT (full dataset), BD_CONTROLES, SCH_CONTROLES
 
 # Outputs:
 #   - Frequency tables (proportions, row-wise percentages)
@@ -47,8 +47,6 @@ run_genotype_analysis <- function(data, group_col, genotype_col, label, drop_col
   }
 }
 
-
-
 # HTT ANALYSIS =================
 run_genotype_analysis(DT, "PATHOLOGY", "HTT_CODE", "HTT: Main group comparison")
 run_genotype_analysis(DT, "PATHOLOGY", "HTT_CODE", "HTT: Intermediate alleles", drop_cols = 3)
@@ -56,16 +54,18 @@ run_genotype_analysis(DT, "PATHOLOGY", "HTT_CODE", "HTT: Expanded alleles", drop
 
 run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "HTT_CODE", "HTT vs type of BD", drop_cols = 3)
 run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "HTT_CODE", "HTT vs type of BD (expanded)", drop_cols = 2)
-
 run_genotype_analysis(BD_CONTROLS, "CD_BINARY", "HTT_CODE", "HTT vs DCO severity in BD", drop_cols = 3)
+
 run_genotype_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "HTT_CODE", "HTT vs type of SCH", drop_cols = 3)
 run_genotype_analysis(SCH_CONTROLS, "CD_BINARY", "HTT_CODE", "HTT vs DCO severity in SCH", drop_cols = 3)
 
 # ATXN1 (SCA1) ANALYSIS =================
 run_genotype_analysis(DT, "PATHOLOGY", "SCA1_CODE", "ATXN1: IA comparison")
 run_genotype_analysis(DT, "PATHOLOGY", "SCA1_CODE", "ATXN1: Intermediate alleles", drop_cols = 3)
-run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA1_CODE", "SCA1 vs type of BP", drop_cols = 3)
-run_genotype_analysis(BD_CONTROLS, "CD_BINARY", "SCA1_CODE", "SCA1 vs DCO severity in BP", drop_cols = 3)
+
+run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA1_CODE", "SCA1 vs type of BD", drop_cols = 3)
+run_genotype_analysis(BD_CONTROLS, "CD_BINARY", "SCA1_CODE", "SCA1 vs DCO severity in BD", drop_cols = 3)
+
 run_genotype_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA1_CODE", "SCA1 vs type of SCH", drop_cols = 3)
 run_genotype_analysis(SCH_CONTROLS, "CD_BINARY", "SCA1_CODE", "SCA1 vs DCO severity in SCH", drop_cols = 3)
 
@@ -74,10 +74,10 @@ run_genotype_analysis(DT, "PATHOLOGY", "SCA2_CODE", "ATXN2: Main group compariso
 run_genotype_analysis(DT, "PATHOLOGY", "SCA2_CODE", "ATXN2: Intermediate alleles", drop_cols = 3)
 run_genotype_analysis(DT, "PATHOLOGY", "SCA2_CODE", "ATXN2: Expanded alleles", drop_cols = 2)
 
-run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA2_CODE", "SCA2 vs type of BP", drop_cols = 3)
+run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA2_CODE", "SCA2 vs type of BD", drop_cols = 3)
 run_genotype_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA2_CODE", "SCA2 vs type of BD (expanded)", drop_cols = 2)
+run_genotype_analysis(BD_CONTROLS, "CD_BINARY", "SCA2_CODE", "SCA2 vs DCO severity in BD", drop_cols = 3)
 
-run_genotype_analysis(BD_CONTROLS, "CD_BINARY", "SCA2_CODE", "SCA2 vs DCO severity in BP", drop_cols = 3)
 run_genotype_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY	", "SCA2_CODE", "SCA2 vs type of SCH", drop_cols = 3)
 run_genotype_analysis(SCH_CONTROLS, "CD_BINARY", "SCA2_CODE", "SCA2 vs DCO severity in SCH", drop_cols = 3)
 

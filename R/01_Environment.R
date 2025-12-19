@@ -131,7 +131,8 @@ MENTAL <- convert_factors(MENTAL, list(
   SCA1_CODE = c("NORMAL", "IA"),
   SCA2_CODE = c("NORMAL", "IA", "EXPANDED"),
   COFFEE = c("Non-coffee", "Coffee"),
-  SMOKER = c("Smoking", "Non-smoking")
+  SMOKER = c("Smoking", "Non-smoking"),
+  CD_BINARY = c("No-CD", "CD")
 ))
 
 CONTROLS <- convert_factors(CONTROLS, list(
@@ -162,7 +163,6 @@ BD <- subset(MENTAL, PATHOLOGY == "BD")
 BD <- BD |> mutate(
   CD = factor(CD, labels = c("NO", "MILD", "MODERATE", "SEVERE", "VERY-SEVERE")),
   PATHOLOGY_TYPE = factor(PATHOLOGY_TYPE, labels = c("BD-I", "BD-II", "Cyclothymia", "Substance-related", "Other-BD")),
-  CD_BINARY = factor(ifelse(CD == "NO", "NO", "CD"), levels = c("NO", "CD")),
   PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == "BD-I", "BD-I", "Other"), levels = c("BD-I", "Other"))
 )
 
@@ -171,7 +171,6 @@ SCH <- subset(MENTAL, PATHOLOGY == "SCH")
 SCH <- SCH |> mutate(
   PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == 1, "SCH", "Other"), levels = c("SCH", "Other")),
   CD = factor(CD, labels = c("NO", "MILD", "MODERATE", "SEVERE")),
-  CD_BINARY = factor(ifelse(CD == "NO", "NO", "CD"), levels = c("NO", "CD"))
 )
 
 # Add binary pathology columns to controls

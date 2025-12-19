@@ -4,9 +4,9 @@
 
 # Author: Sergio Pérez Oliveira
 
-# Description: This script performs non-parametric statistical analyses to compare
+# Description: This script performs No-CDn-parametric statistical analyses to compare
 #              CAG repeat lengths of both alleles in HTT, ATXN1 (SCA1), and ATXN2 (SCA2)
-#              across diagnostic groups (SCZ, BD, Controls), as well as in clinically
+#              across diagNo-CDstic groups (SCZ, BD, Controls), as well as in clinically
 #              defined subgroups based on subtype and severity (DCO).
 #              The analysis includes:
 #                - Descriptive statistics (mean and SD per group)
@@ -29,7 +29,7 @@ source(Env_path)
 rm(Env_path)
 
 run_kruskal_analysis <- function(df, group_col, value_col, result_name = NULL, comparisons_list = NULL) {
-  # If result_name is not provided, use the name of value_col
+  # If result_name is No-CDt provided, use the name of value_col
   if (is.null(result_name)) {
     result_name <- value_col
   }
@@ -78,49 +78,61 @@ run_kruskal_analysis <- function(df, group_col, value_col, result_name = NULL, c
 
 ### Long allele
 run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_HTT", "HTT long allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+
 run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_HTT", "HTT long allele BD_CONTROLS - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
-run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_HTT", "HTT long allele BD_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_HTT", "HTT long allele BD_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+
 run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_HTT", "HTT long allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_HTT", "HTT long allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_HTT", "HTT long allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
 ### Short allele
 run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_HTT", "HTT short allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+
 run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_HTT", "HTT short allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
-run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_HTT", "HTT short allele BD_CONTROLES - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_HTT", "HTT short allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+
 run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_HTT", "HTT short allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_HTT", "HTT short allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_HTT", "HTT short allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
 # ATXN1 (SCA1) ANALYSIS ----
 
 ### Long allele
 run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_SCA1", "SCA1 long allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+
 run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA1", "SCA1 long allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
-run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_SCA1", "SCA1 long allele BD_CONTROLES - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_SCA1", "SCA1 long allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+
 run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA1", "SCA1 long allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_SCA1", "SCA1 long allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_SCA1", "SCA1 long allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
 ### Short allele
 run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_SCA1", "SCA1 short allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+
 run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA1", "SCA1 short allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
-run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_SCA1", "SCA1 short allele BD_CONTROLES - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_SCA1", "SCA1 short allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+
 run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA1", "SCA1 short allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_SCA1", "SCA1 short allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_SCA1", "SCA1 short allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
 # ATXN2 (SCA2) ANALYSIS ----
 
 ### Long allele
 run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_SCA2", "SCA2 long allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+
 run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA2", "SCA2 long allele BD_CONTROLES - Pathology type", list(c("BD-I","Other"), c("BD-I","CONTROL"), c("Other","CONTROL")))
-run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_SCA2", "SCA2 long allele BD_CONTROLES - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_SCA2", "SCA2 long allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+
 run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA2", "SCA2 long allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_SCA2", "SCA2 long allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_SCA2", "SCA2 long allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
 ### Short allele
 run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_SCA2", "SCA2 short allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+
 run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA2", "SCA2 short allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
-run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_SCA2", "SCA2 short allele BD_CONTROLES - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_SCA2", "SCA2 short allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+
 run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA2", "SCA2 short allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_SCA2", "SCA2 short allele SCH_CONTROLS - Severity", list(c("CD","NO"), c("CD","CONTROL"), c("NO","CONTROL")))
+run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_SCA2", "SCA2 short allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
 #CAG repeats frequencies among cohorts----
 library(dplyr)
@@ -141,7 +153,7 @@ allele_percentages_by_group <- function(
   # Check that all requested columns exist in the dataset
   missing_cols <- setdiff(c(group_var, allele_cols), names(data))
   if (length(missing_cols) > 0) {
-    stop("These columns were not found in 'data': ", paste(missing_cols, collapse = ", "))
+    stop("These columns were No-CDt found in 'data': ", paste(missing_cols, collapse = ", "))
   }
   
   # Convert selected allele columns to long format
