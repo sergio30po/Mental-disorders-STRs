@@ -20,20 +20,35 @@ This repository contains the analysis code for the scientific study titled:
 - Victoria Álvarez<sup>1,3,15</sup>
 
 1 Health Research Institute of the Principality of Asturias (ISPA), Oviedo, Spain
+
 2 University of Oviedo, Oviedo, Spain
+
 3 Genetics Laboratory, Central University Hospital of Asturias (HUCA), Oviedo, Spain
+
 4 Asociación Parkinson Asturias (APARKAS), Oviedo, Spain
+
 5 Department of Neurology, Central University Hospital of Asturias (HUCA), Oviedo, Spain
+
 6 Department of Medicine, University of Oviedo, Oviedo, Spain
+
 7 Department of Psychiatry and Psychology, La Fe University and Polytechnic Hospital, Valencia, Spain
+
 8 Department of Medicine, University of Valencia, Valencia, Spain
+
 9 Mental Health Research Group, La Fe Health Research Institute, Valencia, Spain
+
 10 Parc Sanitari Sant Joan de Déu; CIBERSAM, Barcelona, Spain
+
 11 Psychiatry Department, Hospital Universitari Mútua Terrassa, Barcelona; ISIC Medical Center, Barcelona; Universitat de Barcelona; CIBERSAM
+
 12 Ace Alzheimer Center Barcelona, Universitat Internacional de Catalunya, 08028 Barcelona, Spain
+
 13 Networking Research Center on Neurodegenerative Diseases (CIBERNED), Instituto de Salud Carlos III, 28029 Madrid, Spain
+
 14 Department of Psychiatry, University of Oviedo, Oviedo, Spain
+
 15 Health Service of the Principality of Asturias (SESPA), Oviedo, Spain
+
 16 Biomedical Research Networking Center in Mental Health (CIBERSAM), Oviedo, Spain
 
 ---
