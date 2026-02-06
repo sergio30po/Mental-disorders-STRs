@@ -12,7 +12,7 @@
 # Description:
 # This script loads mental patients and control datasets,
 # converts relevant variables to factors or numeric types,
-# subsets data by pathology groups (Bipolar Disorder, Schizophrenia),
+# subsets data by pathology groups (Bipolar Disorder, SCZizophrenia),
 # and combines datasets for further analyses.
 # ==============================================================================
 
@@ -22,7 +22,8 @@ required_packages <- c(
   "corrplot", "devtools", "ggpubr", "lsr", "Rcmdr", "survival", "KMsurv",
   "survMisc", "survminer", "ggfortify", "flexsurv", "actuar", "nortest",
   "rstatix", "gtsummary", "car", "DataExplorer", "effectsize", "lmtest", 
-  "nnet","igraph","tidyverse","ggraph","tidygraph","visNetwork"
+  "nnet","igraph","tidyverse","ggraph","tidygraph","visNetwork","tidyr",
+  "scales","stringr","grid","broom","boot","ggeffects","visreg","patchwork","rlang","cowplot"
 )
 
 install_and_load <- function(packages) {
@@ -125,11 +126,11 @@ convert_factors <- function(df, list_of_vars_and_labels) {
 }
 
 MENTAL <- convert_factors(MENTAL, list(
-  PATHOLOGY = c("BD", "SCH"),
+  PATHOLOGY = c("BD", "SCZ"),
   SEX = c("Male", "Female"),
   HTT_CODE = c("NORMAL", "IA", "EXPANDED"),
-  SCA1_CODE = c("NORMAL", "IA"),
-  SCA2_CODE = c("NORMAL", "IA", "EXPANDED"),
+  ATXN1_CODE = c("NORMAL", "IA"),
+  ATXN2_CODE = c("NORMAL", "IA", "EXPANDED"),
   COFFEE = c("Non-coffee", "Coffee"),
   SMOKER = c("Smoking", "Non-smoking"),
   CD_BINARY = c("No-CD", "CD")
@@ -139,10 +140,16 @@ CONTROLS <- convert_factors(CONTROLS, list(
   PATHOLOGY = "CONTROL",
   SEX = c("Male", "Female"),
   HTT_CODE = c("NORMAL", "IA", "EXPANDED"),
-  SCA1_CODE = c("NORMAL", "IA"),
-  SCA2_CODE = c("NORMAL", "IA"),
+  ATXN1_CODE = c("NORMAL", "IA"),
+  ATXN2_CODE = c("NORMAL", "IA"),
   SMOKER = c("Smoking", "Non-smoking")
 ))
+
+MENTAL$APOE_E4 <- ifelse(MENTAL$APOE %in% c("34", "44"), 1, 0)
+CONTROLS$APOE_E4 <- ifelse(CONTROLS$APOE %in% c("34", "44"), 1, 0)
+
+MENTAL$APOE_E4 <- factor(MENTAL$APOE_E4, levels = c(0, 1),labels = c("E4-", "E4+"))
+CONTROLS$APOE_E4 <- factor(CONTROLS$APOE_E4, levels = c(0, 1),labels = c("E4-", "E4+"))
 
 # Convert numeric variables
 to_numeric <- function(df, vars) {
@@ -150,11 +157,13 @@ to_numeric <- function(df, vars) {
   return(df)
 }
 
-MENTAL <- to_numeric(MENTAL, c("ALLELE1_HTT", "ALLELE2_HTT", "ALLELE1_SCA1", "ALLELE2_SCA1",
-                               "ALLELE1_SCA2", "ALLELE2_SCA2", "AGE", "ONSET_AGE", "DURATION"))
+MENTAL <- to_numeric(MENTAL, c("ALLELE1_HTT", "ALLELE2_HTT", "ALLELE1_ATXN1", "ALLELE2_ATXN1",
+                               "ALLELE1_ATXN2", "ALLELE2_ATXN2", "AGE", "ONSET_AGE", "DURATION"))
 
-CONTROLS <- to_numeric(CONTROLS, c("ALLELE1_HTT", "ALLELE2_HTT", "ALLELE1_SCA1", "ALLELE2_SCA1",
-                                   "ALLELE1_SCA2", "ALLELE2_SCA2", "AGE"))
+CONTROLS <- to_numeric(CONTROLS, c("ALLELE1_HTT", "ALLELE2_HTT", "ALLELE1_ATXN1", "ALLELE2_ATXN1",
+                                   "ALLELE1_ATXN2", "ALLELE2_ATXN2", "AGE"))
+CONTROLS <- CONTROLS |> mutate(APOE = as.character(APOE))
+MENTAL   <- MENTAL   |> mutate(APOE = as.character(APOE))
 
 # Subsetting by pathology groups ----
 
@@ -163,13 +172,22 @@ BD <- subset(MENTAL, PATHOLOGY == "BD")
 BD <- BD |> mutate(
   CD = factor(CD, labels = c("NO", "MILD", "MODERATE", "SEVERE", "VERY-SEVERE")),
   PATHOLOGY_TYPE = factor(PATHOLOGY_TYPE, labels = c("BD-I", "BD-II", "Cyclothymia", "Substance-related", "Other-BD")),
-  PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == "BD-I", "BD-I", "Other"), levels = c("BD-I", "Other"))
+  PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == "BD-I", "BD-I", "Other"), levels = c("BD-I", "Other")),
+  BD_type = factor(
+    case_when(
+      is.na(PATHOLOGY_TYPE)      ~ NA_character_,
+      PATHOLOGY_TYPE == "BD-I"   ~ "TBP1",
+      PATHOLOGY_TYPE == "BD-II"  ~ "TBP2",
+      TRUE                       ~ "Other"
+    ),
+    levels = c("TBP1", "TBP2", "Other")
+  )
 )
 
-# Schizophrenia subset and transformations
-SCH <- subset(MENTAL, PATHOLOGY == "SCH")
-SCH <- SCH |> mutate(
-  PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == 1, "SCH", "Other"), levels = c("SCH", "Other")),
+# SCZizophrenia subset and transformations
+SCZ <- subset(MENTAL, PATHOLOGY == "SCZ")
+SCZ <- SCZ |> mutate(
+  PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == 1, "SCZ", "Other"), levels = c("SCZ", "Other")),
   CD = factor(CD, labels = c("NO", "MILD", "MODERATE", "SEVERE")),
 )
 
@@ -186,13 +204,15 @@ DT <- bind_rows(
 
 DT$PATHOLOGY <- as.factor(DT$PATHOLOGY)
 
+CONTROLS$BD_type <- "CONTROL"
 BD_CONTROLS <- bind_rows(
   BD |> select(-COFFEE, -CD, -ONSET_AGE, -DURATION, -PATHOLOGY_TYPE),
   CONTROLS
 )
+CONTROLS <- CONTROLS |> select(-BD_type)
 
-SCH_CONTROLS <- bind_rows(
-  SCH |> select(-COFFEE,-CD, -ONSET_AGE, -DURATION, -PATHOLOGY_TYPE),
+SCZ_CONTROLS <- bind_rows(
+  SCZ |> select(-COFFEE,-CD, -ONSET_AGE, -DURATION, -PATHOLOGY_TYPE),
   CONTROLS
 )
 
@@ -203,12 +223,12 @@ if (!dir.exists("results")) {
 }
 
 saveRDS(BD, file = "results/BD.rds")
-saveRDS(SCH, file = "results/SCH.rds")
+saveRDS(SCZ, file = "results/SCZ.rds")
 saveRDS(DT, file = "results/DT.rds")
 
 # Save as XLSX
 write_xlsx(BD, path = "results/BD.xlsx")
-write_xlsx(SCH, path = "results/SCH.xlsx")
+write_xlsx(SCZ, path = "results/SCZ.xlsx")
 write_xlsx(DT, path = "results/DT.xlsx")
 
 # Session info ----

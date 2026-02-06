@@ -4,9 +4,9 @@
 
 # Author: Sergio Pérez Oliveira
 
-# Description: This script performs No-CDn-parametric statistical analyses to compare
-#              CAG repeat lengths of both alleles in HTT, ATXN1 (SCA1), and ATXN2 (SCA2)
-#              across diagNo-CDstic groups (SCZ, BD, Controls), as well as in clinically
+# Description: This script performs Non-parametric statistical analyses to compare
+#              CAG repeat lengths of both alleles in HTT, ATXN1 (ATXN1), and ATXN2 (ATXN2)
+#              across diagnostic groups (SCZ, BD, Controls), as well as in clinically
 #              defined subgroups based on subtype and severity (DCO).
 #              The analysis includes:
 #                - Descriptive statistics (mean and SD per group)
@@ -17,7 +17,7 @@
 
 # Inputs:
 #   - Manually selected environment file with custom functions (.R)
-#   - Dataframes: DT (full dataset), BP_CONTROLES, SCH_CONTROLES
+#   - Dataframes: DT (full dataset), BP_CONTROLES, SCZ_CONTROLES
 
 # Outputs:
 #   - Printed summaries of statistics, test results and effect sizes
@@ -28,122 +28,169 @@ Env_path <- file.choose()
 source(Env_path)
 rm(Env_path)
 
-run_kruskal_analysis <- function(df, group_col, value_col, result_name = NULL, comparisons_list = NULL) {
-  # If result_name is No-CDt provided, use the name of value_col
-  if (is.null(result_name)) {
-    result_name <- value_col
-  }
+run_kruskal_analysis <- function(df, group_col, value_col,
+                                 result_name = NULL,
+                                 comparisons_list = NULL,
+                                 p_adjust = "holm",
+                                 run_pairwise_always = TRUE,
+                                 exact_wilcox = FALSE) {
+  # Packages needed: FSA, rcompanion, rstatix, dplyr
+  # library(FSA); library(rcompanion); library(rstatix); library(dplyr)
+  
+  if (is.null(result_name)) result_name <- value_col
   
   cat("\n--- Analysis for:", result_name, "---\n")
   
-  # 1. Mean and standard deviation
+  # Basic checks
+  if (!group_col %in% names(df)) stop("group_col not found in df")
+  if (!value_col %in% names(df)) stop("value_col not found in df")
+  
+  # Drop rows with missing group/value to keep n consistent
+  dsub <- df[!is.na(df[[group_col]]) & !is.na(df[[value_col]]), , drop = FALSE]
+  dsub[[group_col]] <- factor(dsub[[group_col]])
+  
+  # 1) Descriptives
   cat("Mean and SD by group:\n")
-  mean_sd_result <- mean_sd(df, group_col, value_col, result_name = value_col)
+  mean_sd_result <- mean_sd(dsub, group_col, value_col, result_name = value_col)
   print(mean_sd_result)
   
-  # 2. Kruskal-Wallis test
-  cat("\nKruskal-Wallis test:\n")
-  kruskal <- kruskal.test(df[[value_col]] ~ df[[group_col]])
-  print(kruskal)
+  # 2) Kruskal–Wallis
+  cat("\nKruskal–Wallis test:\n")
+  kw <- kruskal.test(dsub[[value_col]] ~ dsub[[group_col]])
+  print(kw)
   
-  # 3. If significant, perform post-hoc tests and effect size
-  if (kruskal$p.value < 0.05) {
-    cat("\nDunn's test (Holm correction):\n")
-    dunn_result <- FSA::dunnTest(df[[value_col]] ~ df[[group_col]], method = "holm")
+  # 3) Global effect size: epsilon-squared (ε²)
+  cat("\nGlobal effect size (epsilon-squared, ε²):\n")
+  eps2 <- rcompanion::epsilonSquared(x = dsub[[value_col]], g = dsub[[group_col]])
+  print(eps2)
+  
+  # Decide whether to run pairwise
+  run_pairwise <- run_pairwise_always || (kw$p.value < 0.05)
+  
+  if (run_pairwise) {
+    if (kw$p.value < 0.05) {
+      cat("\nPost hoc tests (inferential; KW significant):\n")
+    } else {
+      cat("\nPost hoc tests (exploratory; KW not significant):\n")
+    }
+    
+    # 4) Dunn post hoc (Holm or chosen adjustment)
+    cat("\nDunn's test (p-adjust =", p_adjust, "):\n")
+    dunn_result <- FSA::dunnTest(
+      dsub[[value_col]] ~ dsub[[group_col]],
+      method = p_adjust
+    )
     print(dunn_result)
     
-    cat("\nPairwise Wilcoxon test (Holm correction):\n")
-    wilcox_result <- pairwise.wilcox.test(df[[value_col]], df[[group_col]], p.adjust.method = "holm")
+    # 5) Pairwise Wilcoxon (same p-adjust)
+    cat("\nPairwise Wilcoxon test (p-adjust =", p_adjust, "):\n")
+    wilcox_result <- pairwise.wilcox.test(
+      x = dsub[[value_col]],
+      g = dsub[[group_col]],
+      p.adjust.method = p_adjust,
+      exact = exact_wilcox
+    )
     print(wilcox_result)
     
-    # 4. Effect size using wilcox_effsize if comparisons provided
+    # 6) Pairwise effect sizes (rank-biserial) for selected comparisons
     if (!is.null(comparisons_list)) {
-      cat("\nEffect size for selected comparisons:\n")
-      effsize <- df %>%
-        wilcox_effsize(as.formula(paste(value_col, "~", group_col)),
-                       paired = FALSE,
-                       comparisons = comparisons_list,
-                       p.adjust.method = "holm")
+      cat("\nPairwise effect sizes (rank-biserial correlation; p-adjust =", p_adjust, "):\n")
+      effsize <- dsub %>%
+        rstatix::wilcox_effsize(
+          as.formula(paste(value_col, "~", group_col)),
+          paired = FALSE,
+          comparisons = comparisons_list,
+          p.adjust.method = p_adjust
+        )
       print(effsize)
     } else {
-      cat("No specific comparisons provided for effect size.\n")
+      cat("\nNo comparisons_list provided for effect sizes.\n")
     }
+    
   } else {
-    cat("\nKruskal-Wallis not significant; post-hoc tests and effect sizes are not performed.\n")
+    cat("\nPairwise tests were not run.\n")
   }
+  
+  # Return objects invisibly (useful for saving)
+  invisible(list(
+    descriptives = mean_sd_result,
+    kw = kw,
+    eps2 = eps2,
+    dunn = if (run_pairwise) dunn_result else NULL,
+    pairwise_wilcox = if (run_pairwise) wilcox_result else NULL,
+    pairwise_effsize = if (run_pairwise && !is.null(comparisons_list)) effsize else NULL
+  ))
 }
+
 
 
 # HTT ANALYSIS ----
 
 ### Long allele
-run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_HTT", "HTT long allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_HTT", "HTT long allele", list(c("BD","SCZ"), c("BD","CONTROL"), c("SCZ","CONTROL")))
 
-run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_HTT", "HTT long allele BD_CONTROLS - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_HTT", "HTT long allele BD_CONTROLS - Pathology type", list(c("BD-I","Other"), c("BD-I","CONTROL"), c("Other","CONTROL")))
 run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_HTT", "HTT long allele BD_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
-run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_HTT", "HTT long allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_HTT", "HTT long allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+run_kruskal_analysis(SCZ_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_HTT", "HTT long allele SCZ_CONTROLS - Pathology type", list(c("SCZ","Other"), c("Other","CONTROL"), c("SCZ","CONTROL")))
+run_kruskal_analysis(SCZ_CONTROLS, "CD_BINARY", "ALLELE2_HTT", "HTT long allele SCZ_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
 ### Short allele
-run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_HTT", "HTT short allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_HTT", "HTT short allele", list(c("BD","SCZ"), c("BD","CONTROL"), c("SCZ","CONTROL")))
 
-run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_HTT", "HTT short allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_HTT", "HTT short allele BD_CONTROLES - Pathology type", list(c("BD-I","Other"), c("BD-I","CONTROL"), c("Other","CONTROL")))
 run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_HTT", "HTT short allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
-run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_HTT", "HTT short allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_HTT", "HTT short allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+run_kruskal_analysis(SCZ_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_HTT", "HTT short allele SCZ_CONTROLS - Pathology type", list(c("SCZ","Other"), c("Other","CONTROL"), c("SCZ","CONTROL")))
+run_kruskal_analysis(SCZ_CONTROLS, "CD_BINARY", "ALLELE1_HTT", "HTT short allele SCZ_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
-# ATXN1 (SCA1) ANALYSIS ----
-
-### Long allele
-run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_SCA1", "SCA1 long allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
-
-run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA1", "SCA1 long allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
-run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_SCA1", "SCA1 long allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
-
-run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA1", "SCA1 long allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_SCA1", "SCA1 long allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
-
-### Short allele
-run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_SCA1", "SCA1 short allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
-
-run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA1", "SCA1 short allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
-run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_SCA1", "SCA1 short allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
-
-run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA1", "SCA1 short allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_SCA1", "SCA1 short allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
-
-# ATXN2 (SCA2) ANALYSIS ----
+# ATXN1 ANALYSIS ----
 
 ### Long allele
-run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_SCA2", "SCA2 long allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_ATXN1", "ATXN1 long allele", list(c("BD","SCZ"), c("BD","CONTROL"), c("SCZ","CONTROL")))
 
-run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA2", "SCA2 long allele BD_CONTROLES - Pathology type", list(c("BD-I","Other"), c("BD-I","CONTROL"), c("Other","CONTROL")))
-run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_SCA2", "SCA2 long allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_ATXN1", "ATXN1 long allele BD_CONTROLES - Pathology type", list(c("BD-I","Other"), c("BD-I","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_ATXN1", "ATXN1 long allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
-run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_SCA2", "SCA2 long allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE2_SCA2", "SCA2 long allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+run_kruskal_analysis(SCZ_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_ATXN1", "ATXN1 long allele SCZ_CONTROLS - Pathology type", list(c("SCZ","Other"), c("Other","CONTROL"), c("SCZ","CONTROL")))
+run_kruskal_analysis(SCZ_CONTROLS, "CD_BINARY", "ALLELE2_ATXN1", "ATXN1 long allele SCZ_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
 ### Short allele
-run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_SCA2", "SCA2 short allele", list(c("BD","SCH"), c("BD","CONTROL"), c("SCH","CONTROL")))
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_ATXN1", "ATXN1 short allele", list(c("BD","SCZ"), c("BD","CONTROL"), c("SCZ","CONTROL")))
 
-run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA2", "SCA2 short allele BD_CONTROLES - Pathology type", list(c("TBD-1","Other"), c("TBD-1","CONTROL"), c("Other","CONTROL")))
-run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_SCA2", "SCA2 short allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_ATXN1", "ATXN1 short allele BD_CONTROLES - Pathology type", list(c("BD-I","Other"), c("BD-I","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_ATXN1", "ATXN1 short allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
-run_kruskal_analysis(SCH_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_SCA2", "SCA2 short allele SCH_CONTROLS - Pathology type", list(c("SCH","Other"), c("Other","CONTROL"), c("SCH","CONTROL")))
-run_kruskal_analysis(SCH_CONTROLS, "CD_BINARY", "ALLELE1_SCA2", "SCA2 short allele SCH_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+run_kruskal_analysis(SCZ_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_ATXN1", "ATXN1 short allele SCZ_CONTROLS - Pathology type", list(c("SCZ","Other"), c("Other","CONTROL"), c("SCZ","CONTROL")))
+run_kruskal_analysis(SCZ_CONTROLS, "CD_BINARY", "ALLELE1_ATXN1", "ATXN1 short allele SCZ_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+
+# ATXN2 ANALYSIS ----
+
+### Long allele
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE2_ATXN2", "ATXN2 long allele", list(c("BD","SCZ"), c("BD","CONTROL"), c("SCZ","CONTROL")))
+
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_ATXN2", "ATXN2 long allele BD_CONTROLES - Pathology type", list(c("BD-I","Other"), c("BD-I","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE2_ATXN2", "ATXN2 long allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+
+run_kruskal_analysis(SCZ_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE2_ATXN2", "ATXN2 long allele SCZ_CONTROLS - Pathology type", list(c("SCZ","Other"), c("Other","CONTROL"), c("SCZ","CONTROL")))
+run_kruskal_analysis(SCZ_CONTROLS, "CD_BINARY", "ALLELE2_ATXN2", "ATXN2 long allele SCZ_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+
+### Short allele
+run_kruskal_analysis(DT, "PATHOLOGY", "ALLELE1_ATXN2", "ATXN2 short allele", list(c("BD","SCZ"), c("BD","CONTROL"), c("SCZ","CONTROL")))
+
+run_kruskal_analysis(BD_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_ATXN2", "ATXN2 short allele BD_CONTROLES - Pathology type", list(c("BD-I","Other"), c("BD-I","CONTROL"), c("Other","CONTROL")))
+run_kruskal_analysis(BD_CONTROLS, "CD_BINARY", "ALLELE1_ATXN2", "ATXN2 short allele BD_CONTROLES - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
+
+run_kruskal_analysis(SCZ_CONTROLS, "PATHOLOGY_TYPE_BINARY", "ALLELE1_ATXN2", "ATXN2 short allele SCZ_CONTROLS - Pathology type", list(c("SCZ","Other"), c("Other","CONTROL"), c("SCZ","CONTROL")))
+run_kruskal_analysis(SCZ_CONTROLS, "CD_BINARY", "ALLELE1_ATXN2", "ATXN2 short allele SCZ_CONTROLS - Severity", list(c("CD","No-CD"), c("CD","CONTROL"), c("No-CD","CONTROL")))
 
 #CAG repeats frequencies among cohorts----
-library(dplyr)
-library(tidyr)
-library(rlang)
 
 allele_percentages_by_group <- function(
     data,
     group_var      = "PATHOLOGY",
-    allele_cols    = c("ALLELE1_HTT", "ALLELE2_HTT"),  # <- pass SCA1/SCA2 here when needed
-    group_to_show  = NULL,                              # e.g. "BD", "SCH", "CONTROL"
+    allele_cols    = c("ALLELE1_HTT", "ALLELE2_HTT"),  # <- pass ATXN1/ATXN2 here when needed
+    group_to_show  = NULL,                              # e.g. "BD", "SCZ", "CONTROL"
     output         = c("long", "wide"),                 # output format
     digits         = 2,
     drop_na        = TRUE
@@ -206,15 +253,15 @@ allele_percentages_by_group <- function(
 
 allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_HTT", "ALLELE2_HTT"),  group_to_show = "CONTROL")
 allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_HTT", "ALLELE2_HTT"),  group_to_show = "BD")
-allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_HTT", "ALLELE2_HTT"),  group_to_show = "SCH")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_HTT", "ALLELE2_HTT"),  group_to_show = "SCZ")
 
-allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA1", "ALLELE2_SCA1"),  group_to_show = "CONTROL")
-allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA1", "ALLELE2_SCA1"),  group_to_show = "BD")
-allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA1", "ALLELE2_SCA1"),  group_to_show = "SCH")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_ATXN1", "ALLELE2_ATXN1"),  group_to_show = "CONTROL")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_ATXN1", "ALLELE2_ATXN1"),  group_to_show = "BD")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_ATXN1", "ALLELE2_ATXN1"),  group_to_show = "SCZ")
 
-allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA2", "ALLELE2_SCA2"),  group_to_show = "CONTROL")
-allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA2", "ALLELE2_SCA2"),  group_to_show = "BD")
-allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_SCA2", "ALLELE2_SCA2"),  group_to_show = "SCH")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_ATXN2", "ALLELE2_ATXN2"),  group_to_show = "CONTROL")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_ATXN2", "ALLELE2_ATXN2"),  group_to_show = "BD")
+allele_percentages_by_group(DT,  allele_cols = c("ALLELE1_ATXN2", "ALLELE2_ATXN2"),  group_to_show = "SCZ")
 
 
 # Session info ----

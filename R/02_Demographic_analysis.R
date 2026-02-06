@@ -12,8 +12,8 @@
 
 # Inputs:
 #   - Manually selected environment file with custom functions (.R)
-#   - Manually selected data file to update DT, SCH_CONTROLES, BD_CONTROLES
-#   - Dataframes: DT, MENTAL, BD, SCH, SCH_CONTROLES, BD_CONTROLES
+#   - Manually selected data file to update DT, SCZ_CONTROLES, BD_CONTROLES
+#   - Dataframes: DT, MENTAL, BD, SCZ, SCZ_CONTROLES, BD_CONTROLES
 
 # Outputs:
 #   - Descriptive statistics (mean ± SD, proportions)
@@ -29,7 +29,6 @@ Env_path <- file.choose()
 source(Env_path)
 rm(Env_path)
 
-
 # Age at onset ----
 mean_sd(MENTAL, "PATHOLOGY", "ONSET_AGE", "Age at onset")
 wilcox.test(ONSET_AGE ~ PATHOLOGY, data = MENTAL, exact = TRUE)
@@ -38,6 +37,7 @@ rank_biserial(ONSET_AGE ~ PATHOLOGY, data = MENTAL)
 # Age at death / last visit ----
 mean_sd(DT, "PATHOLOGY", "AGE", "Age at death / last visit")
 kruskal.test(AGE ~ PATHOLOGY, data = DT)
+epsilonSquared(x=DT$AGE,g=DT$PATHOLOGY, ci=TRUE)
 dunn <- dunnTest(DT$AGE ~ DT$PATHOLOGY, method = "holm")
 print(dunn, dunn.test.results = TRUE)
 pairwise.wilcox.test(x = DT$AGE, g = DT$PATHOLOGY, p.adjust.method = "holm")
@@ -66,7 +66,7 @@ my_function(Table)
 pairwise_fisher_test(Table, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
 
 # Smoking status ----
-smoking_tab <- TABLE(DT, "PATHOLOGY", "SMOKER", "Smoking by pathology")
+smoking_tab <- TABLE(MENTAL, "PATHOLOGY", "SMOKER", "Smoking by pathology")
 rowPercents(smoking_tab)
 my_function(smoking_tab)
 pairwise_fisher_test(smoking_tab, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
@@ -76,8 +76,6 @@ coffee_tab <- TABLE(MENTAL, "PATHOLOGY", "COFFEE", "Coffee consumption by pathol
 rowPercents(coffee_tab)
 my_function(coffee_tab)
 pairwise_fisher_test(coffee_tab, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
-
-
 
 # Cognitive decline ----
 
@@ -90,12 +88,12 @@ cd_bin_tab <- table(BD$CD_BINARY)
 round(prop.table(cd_bin_tab) * 100, 2)
 cd_bin_tab
 
-cd_tab <- table(SCH$CD)
+cd_tab <- table(SCZ$CD)
 cd_percent <- round(prop.table(cd_tab) * 100, 2)
 cd_tab
 cd_percent
 
-cd_bin_tab <- table(SCH$CD_BINARY)
+cd_bin_tab <- table(SCZ$CD_BINARY)
 round(prop.table(cd_bin_tab) * 100, 2)
 cd_bin_tab
 
@@ -108,12 +106,17 @@ subtype_bin_tab <- table(BD$PATHOLOGY_TYPE_BINARY)
 round(prop.table(subtype_bin_tab) * 100, 2)
 subtype_bin_tab
 
-sch_type_tab <- table(SCH$PATHOLOGY_TYPE)
-round(prop.table(sch_type_tab) * 100, 2)
-sch_type_tab
-sch_type_bin_tab <- table(SCH$PATHOLOGY_TYPE_BINARY)
-round(prop.table(sch_type_bin_tab) * 100, 2)
-sch_type_bin_tab
+subtype_TBP_tab <- table(BD$BD_type)
+round(prop.table(subtype_TBP_tab) * 100, 2)
+subtype_TBP_tab
+
+
+SCZ_type_tab <- table(SCZ$PATHOLOGY_TYPE)
+round(prop.table(SCZ_type_tab) * 100, 2)
+SCZ_type_tab
+SCZ_type_bin_tab <- table(SCZ$PATHOLOGY_TYPE_BINARY)
+round(prop.table(SCZ_type_bin_tab) * 100, 2)
+SCZ_type_bin_tab
 
 
 # Missing data ----

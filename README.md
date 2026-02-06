@@ -106,7 +106,7 @@ The project aims to evaluate the role of intermediate-length **CAG repeats** in 
 
 │   ├── [BD.xlsx](results/BD.xlsx)               # Biolar disorder dataset
 
-│   ├── [SCH.xlsx](results/SCH.xlsx)            # Shizophrenia dataset
+│   ├── [SCZ.xlsx](results/SCZ.xlsx)            # Shizophrenia dataset
 
 │   └── [DT.xlsx](results/DT.xlsx)             # Complete dataset
 
