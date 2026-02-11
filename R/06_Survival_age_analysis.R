@@ -712,8 +712,164 @@ wilcox.test(DURATION ~ APOE_E4, data = SCZ_CD)
 rank_biserial(DURATION ~ APOE_E4, data = SCZ_CD)
 
 # 4. SURVIVAL CURVES ----
+# BD COX MODEL----
+# 1) Data
+vars_needed <- c(
+  "DURATION","SEX","SMOKER","COFFEE","APOE_E4",
+  "ALLELE1_HTT","ALLELE2_HTT",
+  "ALLELE1_ATXN1","ALLELE2_ATXN1",
+  "ALLELE1_ATXN2","ALLELE2_ATXN2"
+)
 
-# BD
+BD_cox <- BD %>%
+  select(all_of(vars_needed)) %>%
+  filter(if_all(everything(), ~ !is.na(.))) %>%
+  mutate(
+    SEX = factor(SEX),
+    SMOKER = factor(SMOKER),
+    COFFEE = factor(COFFEE),
+    APOE_E4 = factor(APOE_E4)
+  )
+
+surv_object <- Surv(time = BD_cox$DURATION, event = rep(1, nrow(BD_cox)))
+covars <- c("SEX","SMOKER","COFFEE","APOE_E4")
+
+# 2) Gene blocks (ALL terms per gene)
+block_string <- function(short, long) {
+  paste(
+    short, paste0("I(", short, "^2)"),
+    long,  paste0("I(", long,  "^2)"),
+    paste0(short, ":", long),
+    sep = " + "
+  )
+}
+
+blocks <- list(
+  HTT  = block_string("ALLELE1_HTT",  "ALLELE2_HTT"),
+  ATXN1= block_string("ALLELE1_ATXN1","ALLELE2_ATXN1"),
+  ATXN2= block_string("ALLELE1_ATXN2","ALLELE2_ATXN2")
+)
+
+fit_from_blocks <- function(keep_blocks) {
+  rhs <- c(covars, unname(blocks[keep_blocks]))
+  f <- as.formula(paste0("surv_object ~ ", paste(rhs, collapse = " + ")))
+  coxph(f, data = BD_cox)
+}
+
+# 3) Backward AIC by BLOCK (genes only)
+keep <- names(blocks)
+m_step <- fit_from_blocks(keep)
+aic_step <- AIC(m_step)
+
+repeat {
+  if (length(keep) == 0) break
+  
+  tried <- lapply(keep, function(b) {
+    keep2 <- setdiff(keep, b)
+    fit2 <- fit_from_blocks(keep2)
+    data.frame(drop_block = b, AIC = AIC(fit2), stringsAsFactors = FALSE)
+  }) |> bind_rows()
+  
+  best <- tried[which.min(tried$AIC), ]
+  if (best$AIC + 1e-10 < aic_step) {
+    keep <- setdiff(keep, best$drop_block)
+    m_step <- fit_from_blocks(keep)
+    aic_step <- best$AIC
+  } else {
+    break
+  }
+}
+
+
+# 4) Null / Full for comparison
+m_null <- coxph(as.formula(paste0("surv_object ~ ", paste(covars, collapse = " + "))), data = BD_cox)
+
+m_full <- fit_from_blocks(names(blocks))
+
+# 5) Output + comparisons
+
+cat("\nAIC (null):\n"); print(AIC(m_null))
+cat("\nAIC (full):\n"); print(AIC(m_full))
+cat("\nAIC (step-selected, blockwise):\n"); print(AIC(m_step))
+
+cat("\nGenetic blocks retained after step:\n")
+print(keep)
+
+cat("\nFinal model summary:\n")
+print(summary(m_step))
+
+cat("\nModel comparisons (LRT):\n")
+cat("\n- null vs full:\n"); print(anova(m_null, m_full, test = "LRT"))
+cat("\n- null vs step:\n"); print(anova(m_null, m_step, test = "LRT"))
+cat("\n- step vs full:\n"); print(anova(m_step, m_full, test = "LRT"))
+
+SCZ_cox <- SCZ %>%
+  select(all_of(vars_needed)) %>%
+  filter(if_all(everything(), ~ !is.na(.))) %>%
+  mutate(
+    SEX = factor(SEX),
+    SMOKER = factor(SMOKER),
+    COFFEE = factor(COFFEE),
+    APOE_E4 = factor(APOE_E4)
+  )
+
+
+surv_object <- Surv(time = SCZ_cox$DURATION, event = rep(1, nrow(SCZ_cox)))
+fit_from_blocks <- function(keep_blocks) {
+  rhs <- c(covars, unname(blocks[keep_blocks]))
+  f <- as.formula(paste0("surv_object ~ ", paste(rhs, collapse = " + ")))
+  coxph(f, data = SCZ_cox)
+}
+
+# 3) Backward AIC by BLOCK (genes only)
+keep <- names(blocks)
+m_step <- fit_from_blocks(keep)
+aic_step <- AIC(m_step)
+
+repeat {
+  if (length(keep) == 0) break
+  
+  tried <- lapply(keep, function(b) {
+    keep2 <- setdiff(keep, b)
+    fit2 <- fit_from_blocks(keep2)
+    data.frame(drop_block = b, AIC = AIC(fit2), stringsAsFactors = FALSE)
+  }) |> bind_rows()
+  
+  best <- tried[which.min(tried$AIC), ]
+  if (best$AIC + 1e-10 < aic_step) {
+    keep <- setdiff(keep, best$drop_block)
+    m_step <- fit_from_blocks(keep)
+    aic_step <- best$AIC
+  } else {
+    break
+  }
+}
+
+
+# 4) Null / Full for comparison
+m_null <- coxph(as.formula(paste0("surv_object ~ ", paste(covars, collapse = " + "))), data = SCZ_cox)
+
+m_full <- fit_from_blocks(names(blocks))
+
+# 5) Output + comparisons
+
+cat("\nAIC (null):\n"); print(AIC(m_null))
+cat("\nAIC (full):\n"); print(AIC(m_full))
+cat("\nAIC (step-selected, blockwise):\n"); print(AIC(m_step))
+
+cat("\nGenetic blocks retained after step:\n")
+print(keep)
+
+cat("\nFinal model summary:\n")
+print(summary(m_step))
+
+cat("\nModel comparisons (LRT):\n")
+cat("\n- null vs full:\n"); print(anova(m_null, m_full, test = "LRT"))
+cat("\n- null vs step:\n"); print(anova(m_null, m_step, test = "LRT"))
+cat("\n- step vs full:\n"); print(anova(m_step, m_full, test = "LRT"))
+
+#DURATION COX MODELS
+
 surv_object <- Surv(time = BD$DURATION, event = rep(1, length(BD$DURATION)))
 cox_model <- coxph(surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE, data = BD)
 summary(cox_model)
@@ -743,6 +899,94 @@ summary(cox_model)
 survdiff(surv_object ~ APOE_E4, data = BD_CD, rho = 0)
 survdiff(surv_object ~ HTT_CODE, data = BD_CD, rho = 0)
 survdiff(surv_object ~ ATXN1_CODE, data = BD_CD, rho = 0)
+
+# SCZ
+surv_object <- Surv(time = SCZ$DURATION, event = rep(1, length(SCZ$DURATION)))
+cox_model <- coxph(surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE, data = SCZ)
+summary(cox_model)
+survdiff(surv_object ~ APOE_E4, data = SCZ, rho = 0)
+survdiff(surv_object ~ SEX, data = SCZ, rho = 0)
+survdiff(surv_object ~ SMOKER, data = SCZ, rho = 0)
+survdiff(surv_object ~ ATXN2_CODE, data = SCZ, rho = 0)
+survdiff(surv_object ~ HTT_CODE, data = SCZ, rho = 0)
+survdiff(surv_object ~ ATXN1_CODE, data = SCZ, rho = 0)
+
+surv_object <- Surv(time = SCZ_NOCD$DURATION, event = rep(1, length(SCZ_NOCD$DURATION)))
+survdiff(surv_object ~ APOE_E4, data = SCZ_NOCD, rho = 0)
+survdiff(surv_object ~ HTT_CODE, data = SCZ_NOCD, rho = 0)
+survdiff(surv_object ~ ATXN1_CODE, data = SCZ_NOCD, rho = 0)
+
+surv_object <- Surv(time = SCZ_CD$DURATION, event = rep(1, length(SCZ_CD$DURATION)))
+survdiff(surv_object ~ APOE_E4, data = SCZ_CD, rho = 0)
+survdiff(surv_object ~ ATXN2_CODE, data = SCZ_CD, rho = 0)
+survdiff(surv_object ~ HTT_CODE, data = SCZ_CD, rho = 0)
+survdiff(surv_object ~ ATXN1_CODE, data = SCZ_CD, rho = 0)
+
+# SCZ COX MODEL----
+# 1) Data + Surv
+SCZ_cox <- SCZ %>%
+  select(all_of(vars_needed)) %>%
+  filter(if_all(everything(), ~ !is.na(.))) %>%
+  mutate(
+    SEX = factor(SEX),
+    SMOKER = factor(SMOKER),
+    COFFEE = factor(COFFEE),
+    APOE_E4 = factor(APOE_E4)
+  )
+
+surv_object <- Surv(time = SCZ_cox$DURATION, event = rep(1, nrow(SCZ_cox)))
+
+# Full and null for comparison
+f_full <- as.formula(paste("surv_object ~", paste(c(covars, gen_all), collapse = " + ")))
+m_full <- coxph(f_full, data = SCZ_cox)
+
+m_null <- coxph(
+  as.formula(paste("surv_object ~", paste(covars, collapse = " + "))),
+  data = SCZ_cox
+)
+
+# 6) Output
+cat("\nAIC (null):\n"); print(AIC(m_null))
+cat("\nAIC (full):\n"); print(AIC(m_full))
+cat("\nAIC (step-selected):\n"); print(AIC(m_step))
+
+cat("\nGenetic terms retained after step:\n")
+print(setdiff(attr(terms(m_step), "term.labels"), covars))
+
+cat("\nFinal model summary:\n")
+print(summary(m_step))
+
+#DURATION COX MODELS
+
+surv_object <- Surv(time = SCZ$DURATION, event = rep(1, length(SCZ$DURATION)))
+cox_model <- coxph(surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE, data = SCZ)
+summary(cox_model)
+
+survdiff(surv_object ~ COFFEE, data = SCZ, rho = 0)
+survdiff(surv_object ~ APOE_E4, data = SCZ, rho = 0)
+survdiff(surv_object ~ SEX, data = SCZ, rho = 0)
+survdiff(surv_object ~ SMOKER, data = SCZ, rho = 0)
+survdiff(surv_object ~ ATXN2_CODE, data = SCZ, rho = 0)
+cox_model <- coxph(surv_object ~ ATXN2_CODE, data = SCZ)
+summary(cox_model)
+survdiff(surv_object ~ HTT_CODE, data = SCZ, rho = 0)
+survdiff(surv_object ~ ATXN1_CODE, data = SCZ, rho = 0)
+
+surv_object <- Surv(time = SCZ_NOCD$DURATION, event = rep(1, length(SCZ_NOCD$DURATION)))
+survdiff(surv_object ~ APOE_E4, data = SCZ_NOCD, rho = 0)
+survdiff(surv_object ~ ATXN2_CODE, data = SCZ_NOCD, rho = 0)
+survdiff(surv_object ~ HTT_CODE, data = SCZ_NOCD, rho = 0)
+survdiff(surv_object ~ ATXN1_CODE, data = SCZ_NOCD, rho = 0)
+
+surv_object <- Surv(time = SCZ_CD$DURATION, event = rep(1, length(SCZ_CD$DURATION)))
+cox_model <- coxph(surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE, data = SCZ_CD)
+summary(cox_model)
+survdiff(surv_object ~ ATXN2_CODE, data = SCZ_CD, rho = 0)
+cox_model <- coxph(surv_object ~ ATXN2_CODE, data = SCZ_CD)
+summary(cox_model)
+survdiff(surv_object ~ APOE_E4, data = SCZ_CD, rho = 0)
+survdiff(surv_object ~ HTT_CODE, data = SCZ_CD, rho = 0)
+survdiff(surv_object ~ ATXN1_CODE, data = SCZ_CD, rho = 0)
 
 # SCZ
 surv_object <- Surv(time = SCZ$DURATION, event = rep(1, length(SCZ$DURATION)))
