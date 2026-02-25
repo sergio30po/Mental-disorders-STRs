@@ -12,7 +12,7 @@
 # Description:
 # This script loads mental patients and control datasets,
 # converts relevant variables to factors or numeric types,
-# subsets data by pathology groups (Bipolar Disorder, SCZizophrenia),
+# subsets data by pathology groups (Bipolar Disorder, Schizhophrenia),
 # and combines datasets for further analyses.
 # ==============================================================================
 
@@ -61,8 +61,7 @@ if (interactive()) {
 
 cat("Please select Mental disorders dataset (Excel):\n")
 MENTAL <- read_excel(file.choose()) |> 
-  select(-1) |> 
-  select(-ADMISSION_AGE)
+  select(-1)
 
 cat("Please select Control dataset (Excel):\n")
 CONTROLS <- read_excel(file.choose())[-1, -1] |> 
@@ -184,7 +183,7 @@ BD <- BD |> mutate(
   )
 )
 
-# SCZizophrenia subset and transformations
+# Schizhophrenia subset and transformations
 SCZ <- subset(MENTAL, PATHOLOGY == "SCZ")
 SCZ <- SCZ |> mutate(
   PATHOLOGY_TYPE_BINARY = factor(ifelse(PATHOLOGY_TYPE == 1, "SCZ", "Other"), levels = c("SCZ", "Other")),

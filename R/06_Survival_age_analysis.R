@@ -937,6 +937,24 @@ SCZ_cox <- SCZ %>%
 surv_object <- Surv(time = SCZ_cox$DURATION, event = rep(1, nrow(SCZ_cox)))
 
 # Full and null for comparison
+block_terms <- function(short, long) {
+  list(
+    s   = short,
+    s2  = paste0("I(", short, "^2)"),
+    l   = long,
+    l2  = paste0("I(", long, "^2)"),
+    int = paste0(short, ":", long)
+  )
+}
+
+blocks <- list(
+  HTT   = block_terms("ALLELE1_HTT",   "ALLELE2_HTT"),
+  ATXN1 = block_terms("ALLELE1_ATXN1", "ALLELE2_ATXN1"),
+  ATXN2 = block_terms("ALLELE1_ATXN2", "ALLELE2_ATXN2")
+)
+
+gen_all <- unlist(lapply(blocks, unlist), use.names = FALSE)
+
 f_full <- as.formula(paste("surv_object ~", paste(c(covars, gen_all), collapse = " + ")))
 m_full <- coxph(f_full, data = SCZ_cox)
 
