@@ -16,7 +16,6 @@ Each script corresponds to a specific analytical step, ensuring modularity and r
 | **05_Regression_models.R** | Fits binomial, multinomial, and linear regression models using genetic, clinical, and lifestyle predictors. | Identifies significant associations and interactions influencing disease risk and clinical features. |
 | **06_Survival_age_analysis.R** | Performs survival-type and age-related analyses, including onset and disease duration models. | Evaluates the relationship between genetic variables and clinical progression. |
 | **07_Enrichr-KG.R** | Integrates results from gene enrichment and knowledge graph analyses (enrich-KG). | Constructs and visualizes functional interaction networks using edge and node data. |
-| **Pipeline_Mental-disorders-STRs.Rmd** | Complete pipeline | Complete R Markdown for all analysis. |
 
 ---
 

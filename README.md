@@ -100,7 +100,6 @@ The project aims to evaluate the role of intermediate-length **CAG repeats** in 
 
 │   └── [07_Enrichr-KG.R](R/07_Enrichr-KG.R)            # Functional enrichment using Enrichr and knowledge graphs
 
-│   └── [Pipeline_Mental-disorders-STRs.Rmd](R/Pipeline_Mental-disorders-STRs.Rmd)            # Complete pipeline
 
 ├── 📁 results/                    # Output figures and summary tables
 
