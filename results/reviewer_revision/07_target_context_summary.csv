@@ -1,0 +1,5 @@
+metric,value
+context_nodes,15
+context_edges,22
+target_nodes_present,3
+first_degree_non_target_nodes,12

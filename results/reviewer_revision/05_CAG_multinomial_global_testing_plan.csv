@@ -1,0 +1,4 @@
+test_id,family_id,adjustment_method,analysis_scope,outcome,gene,predictor_block,covariates
+CAG_GLOBAL_MULTINOMIAL__ATXN2,D_CAG_MULTINOMIAL_GLOBAL,holm,MAIN_DIAGNOSIS,PATHOLOGY: BD/SCZ vs CONTROL,ATXN2,short + short^2 + long + long^2 + short:long,SEX + AGE + APOE_E4
+CAG_GLOBAL_MULTINOMIAL__ATXN1,D_CAG_MULTINOMIAL_GLOBAL,holm,MAIN_DIAGNOSIS,PATHOLOGY: BD/SCZ vs CONTROL,ATXN1,short + short^2 + long + long^2 + short:long,SEX + AGE + APOE_E4
+CAG_GLOBAL_MULTINOMIAL__HTT,D_CAG_MULTINOMIAL_GLOBAL,holm,MAIN_DIAGNOSIS,PATHOLOGY: BD/SCZ vs CONTROL,HTT,short + short^2 + long + long^2 + short:long,SEX + AGE + APOE_E4

@@ -1,192 +1,465 @@
-# Script name: 07_Enrichr_KG.R
+# Script name: 07_Enrichr-KG.R
 # ==============================================================================
-# Title: miRNA target network visualization from Enrichr-KG datasets.
-
+# Title: Contextual Enrichr-KG network around HTT, ATXN1 and ATXN2.
+#
 # Author: Sergio Pérez Oliveira
-
-# Description: This script loads and visualizes an interaction network of miRNAs and their target genes, 
-#              integrating enrichment results from multiple sources (e.g., GO, KEGG, DisGeNET). It provides 
-#              both an overview of the full network and a filtered subnetwork focusing on HTT, ATXN1, and 
-#              ATXN2 and their immediate neighbors. Nodes are annotated and colored by source, and the network 
-#              is visualized using both static and interactive layouts with `visNetwork`. 
-# 
-# Inputs: 
-#   - nodes.tsv: node metadata including id, label, kind, and color (optional)
-#   - edges.tsv: edge list including source, target, and relation
+#
+# Reviewer-driven interpretation:
+#   This analysis is EXPLORATORY and CONTEXTUAL only.
+#
+#   The Enrichr-KG network is gene-centered and is NOT derived from:
+#     - CAG repeat length,
+#     - intermediate-allele carrier status,
+#     - STR-specific molecular measurements,
+#     - repeat-QTL data,
+#     - experimentally validated consequences of the repeat variants studied.
+#
+#   Therefore, network proximity or shared annotations must NOT be interpreted as
+#   functional validation, mediation, causality, or a CAG-specific mechanism for
+#   the associations observed in HTT, ATXN1 or ATXN2.
+#
+#   The purpose of this script is limited to showing public-knowledge annotations
+#   and first-degree relationships around the three genes as hypothesis-generating
+#   biological context.
+#
+# Inputs:
+#   - nodes.tsv: Enrichr-KG node metadata; required columns: id, label, kind.
+#                A color column is optional.
+#   - edges.tsv: Enrichr-KG edge list; required columns: source, target, relation.
 #
 # Outputs:
-#   - Interactive network plots highlighting key target genes and node types
-#   - A subnetwork plot restricted to HTT, ATXN1, ATXN2 and their 1st-degree neighbors
+#   - Interactive full Enrichr-KG network.
+#   - Interactive 1st-degree contextual subnetwork around HTT/ATXN1/ATXN2.
+#   - Machine-readable target-neighbour nodes/edges and network summary in
+#     results/reviewer_revision/.
 #
-# Dependencies:
-#   - igraph
-#   - tidyverse
-#   - ggraph
-#   - tidygraph
-#   - visNetwork
+# Important:
+#   No inferential p-values are generated here. This script must not be used to
+#   claim enrichment of CAG-repeat effects or repeat-specific functional evidence.
 # ==============================================================================
 
-# Load data ----
+# Load data ---------------------------------------------------------------------
 
-nodes <- read.delim(file.choose())   # Select your nodes file
-edges <- read.delim(file.choose())   # Select your edges file
+nodes <- read.delim(
+  file.choose(),
+  stringsAsFactors = FALSE,
+  check.names = FALSE
+)
 
-head(nodes)
-head(edges)
+edges <- read.delim(
+  file.choose(),
+  stringsAsFactors = FALSE,
+  check.names = FALSE
+)
 
-# Initial visualization with visNetwork ----
+revision_dir <- file.path("results", "reviewer_revision")
+if (!dir.exists(revision_dir)) {
+  dir.create(revision_dir, recursive = TRUE)
+}
 
-# Prepare nodes for visNetwork
-nodes_vis <- nodes[, c("id", "label", "kind", "color")]
-nodes_vis$color <- ifelse(is.na(nodes_vis$color), "gray", nodes_vis$color)  # default to gray if missing
+target_genes <- c("HTT", "ATXN1", "ATXN2")
 
-# Prepare edges for visNetwork
+# ==============================================================================
+# 1. INPUT VALIDATION AND PROVENANCE SUMMARY
+# ==============================================================================
+
+required_node_cols <- c("id", "label", "kind")
+required_edge_cols <- c("source", "target", "relation")
+
+missing_node_cols <- setdiff(required_node_cols, names(nodes))
+missing_edge_cols <- setdiff(required_edge_cols, names(edges))
+
+if (length(missing_node_cols) > 0) {
+  stop(
+    "nodes.tsv is missing required column(s): ",
+    paste(missing_node_cols, collapse = ", "),
+    call. = FALSE
+  )
+}
+
+if (length(missing_edge_cols) > 0) {
+  stop(
+    "edges.tsv is missing required column(s): ",
+    paste(missing_edge_cols, collapse = ", "),
+    call. = FALSE
+  )
+}
+
+nodes$id <- as.character(nodes$id)
+nodes$label <- as.character(nodes$label)
+nodes$kind <- as.character(nodes$kind)
+
+edges$source <- as.character(edges$source)
+edges$target <- as.character(edges$target)
+edges$relation <- as.character(edges$relation)
+
+# Add a default display color if the source file does not provide one.
+if (!"color" %in% names(nodes)) {
+  nodes$color <- "gray"
+}
+nodes$color[is.na(nodes$color) | nodes$color == ""] <- "gray"
+
+# Unique node IDs are required for graph construction.
+if (anyDuplicated(nodes$id) > 0) {
+  duplicate_ids <- unique(nodes$id[duplicated(nodes$id)])
+  stop(
+    "Duplicate node IDs detected: ",
+    paste(utils::head(duplicate_ids, 10), collapse = ", "),
+    call. = FALSE
+  )
+}
+
+# All edge endpoints should refer to known nodes.
+known_ids <- nodes$id
+unknown_edge_ids <- setdiff(
+  unique(c(edges$source, edges$target)),
+  known_ids
+)
+
+if (length(unknown_edge_ids) > 0) {
+  stop(
+    "edges.tsv contains endpoint ID(s) absent from nodes.tsv: ",
+    paste(utils::head(unknown_edge_ids, 10), collapse = ", "),
+    call. = FALSE
+  )
+}
+
+target_presence <- tibble::tibble(
+  gene = target_genes,
+  present = target_genes %in% nodes$label
+)
+
+if (!all(target_presence$present)) {
+  warning(
+    "Target gene(s) missing from Enrichr-KG nodes: ",
+    paste(target_presence$gene[!target_presence$present], collapse = ", "),
+    call. = FALSE
+  )
+}
+
+node_kind_summary <- nodes %>%
+  dplyr::count(kind, name = "n_nodes") %>%
+  dplyr::arrange(dplyr::desc(n_nodes))
+
+relation_summary <- edges %>%
+  dplyr::count(relation, name = "n_edges") %>%
+  dplyr::arrange(dplyr::desc(n_edges))
+
+network_summary <- tibble::tibble(
+  metric = c(
+    "total_nodes",
+    "total_edges",
+    "target_genes_requested",
+    "target_genes_present"
+  ),
+  value = c(
+    nrow(nodes),
+    nrow(edges),
+    length(target_genes),
+    sum(target_presence$present)
+  )
+)
+
+readr::write_csv(
+  target_presence,
+  file.path(revision_dir, "07_target_gene_presence.csv")
+)
+
+readr::write_csv(
+  network_summary,
+  file.path(revision_dir, "07_network_summary.csv")
+)
+
+readr::write_csv(
+  node_kind_summary,
+  file.path(revision_dir, "07_node_kind_summary.csv")
+)
+
+readr::write_csv(
+  relation_summary,
+  file.path(revision_dir, "07_edge_relation_summary.csv")
+)
+
+cat("\n============================================================\n")
+cat("ENRICHR-KG CONTEXTUAL NETWORK QC\n")
+cat("============================================================\n")
+print(network_summary, n = Inf, width = Inf)
+print(target_presence, n = Inf, width = Inf)
+
+cat("\nInterpretation constraint:\n")
+cat(
+  "This network is gene-centered public-knowledge context and is not ",
+  "CAG/STR-specific functional evidence.\n",
+  sep = ""
+)
+
+# ==============================================================================
+# 2. FULL CONTEXTUAL NETWORK
+# ==============================================================================
+
+nodes_vis <- nodes[, unique(c("id", "label", "kind", "color")), drop = FALSE]
+
 edges_vis <- edges
-colnames(edges_vis)[colnames(edges_vis) == "source"] <- "from"
-colnames(edges_vis)[colnames(edges_vis) == "target"] <- "to"
-edges_vis$title <- edges_vis$relation  # shows relation on hover
+names(edges_vis)[names(edges_vis) == "source"] <- "from"
+names(edges_vis)[names(edges_vis) == "target"] <- "to"
+edges_vis$title <- edges_vis$relation
 
-# Plot interactive network
-visNetwork(nodes_vis, edges_vis) %>%
-  visPhysics(
+# Highlight the three genes without changing the biological meaning of node kind.
+nodes_vis$is_target_gene <- nodes_vis$label %in% target_genes
+nodes_vis$borderWidth <- ifelse(nodes_vis$is_target_gene, 4, 1)
+nodes_vis$size <- ifelse(nodes_vis$is_target_gene, 30, 15)
+
+network_full <- visNetwork::visNetwork(nodes_vis, edges_vis) %>%
+  visNetwork::visPhysics(
     solver = "forceAtlas2Based",
     forceAtlas2Based = list(gravitationalConstant = -150),
     stabilization = list(enabled = TRUE, iterations = 1000),
     minVelocity = 0.1
   ) %>%
-  visNodes(   
-    color = list(border = "black", background = nodes_vis$color, highlight = "yellow"),
-    font = list(size = 16, face = "bold", vadjust = 0),
-    scaling = list(min = 10, max = 30)
+  visNetwork::visNodes(
+    font = list(size = 16, face = "bold", vadjust = 0)
   ) %>%
-  visEdges(smooth = FALSE) %>%
-  visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) %>%
-  visLayout(randomSeed = 123)
+  visNetwork::visEdges(smooth = FALSE) %>%
+  visNetwork::visOptions(
+    highlightNearest = TRUE,
+    nodesIdSelection = TRUE
+  ) %>%
+  visNetwork::visLayout(randomSeed = 123)
 
-# Highlight target genes (HTT, ATXN1, ATXN2) ----
+print(network_full)
 
-# Step 1: define target genes and color for each
-target_genes <- c("HTT", "ATXN1", "ATXN2")
-target_colors <- c("HTT" = "red", "ATXN1" = "blue", "ATXN2" = "green")
+# ==============================================================================
+# 3. FIRST-DEGREE SUBNETWORK AROUND HTT, ATXN1 AND ATXN2
+# ==============================================================================
 
-# Step 2: get IDs of the target nodes
-target_node_ids <- nodes_vis$id[nodes_vis$label %in% target_genes]
+graph_edges <- edges %>%
+  dplyr::transmute(
+    from = source,
+    to = target,
+    relation = relation
+  )
 
-# Step 3: initialize edge and node styles
-edges_vis$color <- "gray"
-edges_vis$width <- 1
-edges_vis$dashes <- FALSE
-nodes_vis$color_current <- nodes_vis$color
+graph_nodes <- nodes %>%
+  dplyr::rename(name = id)
 
-# Step 4: update color and width for each target gene
-for (gene in target_genes) {
-  gene_id <- nodes_vis$id[nodes_vis$label == gene]
-  
-  # Update node color
-  nodes_vis$color_current[nodes_vis$id == gene_id] <- target_colors[gene]
-  
-  # Update edges connected to this gene
-  idx_edges <- which(edges_vis$from == gene_id | edges_vis$to == gene_id)
-  edges_vis$color[idx_edges] <- target_colors[gene]
-  edges_vis$width[idx_edges] <- 3
+graph <- igraph::graph_from_data_frame(
+  d = graph_edges,
+  vertices = graph_nodes,
+  directed = TRUE
+)
+
+igraph::V(graph)$label <- graph_nodes$label[
+  match(igraph::V(graph)$name, graph_nodes$name)
+]
+
+target_nodes <- igraph::V(graph)[
+  igraph::V(graph)$label %in% target_genes
+]
+
+if (length(target_nodes) == 0L) {
+  stop(
+    "None of HTT, ATXN1 or ATXN2 is present in the graph.",
+    call. = FALSE
+  )
 }
 
-# Step 5: visualize with updated styles
-visNetwork(nodes_vis, edges_vis) %>%
-  visPhysics(
-    solver = "forceAtlas2Based",
-    forceAtlas2Based = list(gravitationalConstant = -150),
-    stabilization = TRUE
+# First-degree neighborhood, irrespective of edge direction, because this is a
+# contextual annotation view rather than a causal/directional model.
+neighbor_sets <- igraph::ego(
+  graph,
+  order = 1,
+  nodes = target_nodes,
+  mode = "all"
+)
+
+included_nodes <- unique(unlist(neighbor_sets))
+subgraph <- igraph::induced_subgraph(
+  graph,
+  vids = included_nodes
+)
+
+# ==============================================================================
+# 4. EXPORT THE EXACT CONTEXT SHOWN
+# ==============================================================================
+
+sub_nodes_raw <- igraph::as_data_frame(
+  subgraph,
+  what = "vertices"
+)
+
+sub_edges_raw <- igraph::as_data_frame(
+  subgraph,
+  what = "edges"
+)
+
+sub_nodes_export <- sub_nodes_raw %>%
+  dplyr::mutate(
+    is_target_gene = label %in% target_genes
   ) %>%
-  visNodes(
-    color = list(border = "black", background = nodes_vis$color_current),
-    font = list(size = 16, face = "bold", vadjust = 0, align = "center"),
-    scaling = list(min = 10, max = 40)
-  ) %>%
-  visEdges(smooth = FALSE) %>%
-  visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) %>%
-  visLayout(randomSeed = 123)
+  dplyr::arrange(
+    dplyr::desc(is_target_gene),
+    kind,
+    label
+  )
 
+sub_edges_export <- sub_edges_raw %>%
+  dplyr::mutate(
+    touches_target_gene =
+      from %in% sub_nodes_export$name[sub_nodes_export$is_target_gene] |
+      to %in% sub_nodes_export$name[sub_nodes_export$is_target_gene]
+  )
 
-# Filter network to target genes and neighbors ----
+readr::write_csv(
+  sub_nodes_export,
+  file.path(revision_dir, "07_target_context_nodes.csv")
+)
 
-# Rename columns to match igraph requirements
-colnames(edges)[1:2] <- c("from", "to")
-colnames(nodes)[1] <- "id"
+readr::write_csv(
+  sub_edges_export,
+  file.path(revision_dir, "07_target_context_edges.csv")
+)
 
-# Create full graph
-graph <- graph_from_data_frame(d = edges, vertices = nodes, directed = TRUE)
+context_summary <- tibble::tibble(
+  metric = c(
+    "context_nodes",
+    "context_edges",
+    "target_nodes_present",
+    "first_degree_non_target_nodes"
+  ),
+  value = c(
+    nrow(sub_nodes_export),
+    nrow(sub_edges_export),
+    sum(sub_nodes_export$is_target_gene),
+    sum(!sub_nodes_export$is_target_gene)
+  )
+)
 
-# Assign labels
-V(graph)$label <- nodes$label[match(V(graph)$name, nodes$id)]
+readr::write_csv(
+  context_summary,
+  file.path(revision_dir, "07_target_context_summary.csv")
+)
 
-# Select target genes
-target_nodes <- V(graph)[V(graph)$label %in% target_genes]
+cat("\n============================================================\n")
+cat("TARGET-CENTERED CONTEXT SUMMARY\n")
+cat("============================================================\n")
+print(context_summary, n = Inf, width = Inf)
 
-# Get 1st-degree neighbors (ego network)
-neighbors <- ego(graph, order = 1, nodes = target_nodes, mode = "all")
-included_nodes <- unique(unlist(neighbors))
-subgraph <- induced_subgraph(graph, vids = included_nodes)
+# ==============================================================================
+# 5. TARGET-CENTERED INTERACTIVE VISUALIZATION
+# ==============================================================================
 
-# Assign labels in the subgraph
-V(subgraph)$label <- V(graph)$label[match(V(subgraph)$name, V(graph)$name)]
-
-
-# Assign colors by node type ----
-
-# Define color palette
-node_types <- unique(V(subgraph)$kind)
 palette_colors <- c(
-  "DisGeNET"                            = "#D2DB7D",
-  "GO Biological Process 2021"          = "#FFBAFB",
-  "Gene"                                = "#C5E1A5",
-  "Human Phenotype Ontology"            = "#B6D7FF",
-  "KEGG 2021 Human"                     = "#E9E7F0",
-  "MGI Mammalian Phenotype Level 4 2021"= "#FF9600"
+  "DisGeNET"                             = "#D2DB7D",
+  "GO Biological Process 2021"           = "#FFBAFB",
+  "Gene"                                 = "#C5E1A5",
+  "Human Phenotype Ontology"             = "#B6D7FF",
+  "KEGG 2021 Human"                      = "#E9E7F0",
+  "MGI Mammalian Phenotype Level 4 2021" = "#FF9600"
 )
 
-# Prepare subgraph nodes
-sub_nodes <- data.frame(
-  id = V(subgraph)$name,
-  label = V(subgraph)$label,
-  kind = V(subgraph)$kind,
-  color = palette_colors[V(subgraph)$kind],
-  stringsAsFactors = FALSE
-)
+sub_nodes <- sub_nodes_export %>%
+  dplyr::transmute(
+    id = name,
+    label = label,
+    kind = kind,
+    color = dplyr::coalesce(
+      unname(palette_colors[kind]),
+      "gray"
+    ),
+    borderWidth = ifelse(is_target_gene, 4, 1),
+    size = ifelse(is_target_gene, 32, 16),
+    title = ifelse(
+      is_target_gene,
+      paste0(
+        label,
+        "<br><b>Study target gene</b>",
+        "<br>Contextual Enrichr-KG annotation only; not CAG-specific evidence."
+      ),
+      paste0(
+        label,
+        "<br>Node type: ",
+        kind
+      )
+    )
+  )
 
-# Prepare subgraph edges
-sub_edges <- igraph::as_data_frame(subgraph, what = "edges")
-
-# Add legend for node types ----
+sub_edges <- sub_edges_export %>%
+  dplyr::transmute(
+    from = from,
+    to = to,
+    title = relation
+  )
 
 legend_nodes <- data.frame(
-  label = names(palette_colors),
+  label = c("DisGeNET", "GO BP", "Gene", "HP", "KEGG", "MP"),
   shape = "dot",
   color = unname(palette_colors),
   size = 15,
   stringsAsFactors = FALSE
 )
 
-# Simplify legend labels
-legend_nodes$label <- c("DisGeNET", "GO BP", "Gene", "HP", "KEGG", "MP")
-
-
-# Final visualization of subgraph ----
-
-visNetwork(sub_nodes, sub_edges) %>%
-  visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) %>%
-  visNodes(
-    color = list(border = "black", background = sub_nodes$color, highlight = "yellow"),
-    borderWidth = 1,
+network_target_context <- visNetwork::visNetwork(
+  sub_nodes,
+  sub_edges
+) %>%
+  visNetwork::visOptions(
+    highlightNearest = TRUE,
+    nodesIdSelection = TRUE
+  ) %>%
+  visNetwork::visNodes(
     font = list(face = "bold")
   ) %>%
-  visLayout(randomSeed = 123) %>%
-  visPhysics(enabled = FALSE) %>%
-  visLegend(
+  visNetwork::visLayout(
+    randomSeed = 123
+  ) %>%
+  visNetwork::visPhysics(
+    enabled = FALSE
+  ) %>%
+  visNetwork::visLegend(
     useGroups = FALSE,
     addNodes = legend_nodes,
     position = "left"
   )
 
-# Session info ----
+print(network_target_context)
+
+# ==============================================================================
+# 6. MACHINE-READABLE INTERPRETATION NOTE
+# ==============================================================================
+
+interpretation_note <- c(
+  "07 Enrichr-KG network interpretation",
+  "",
+  "Status: exploratory / hypothesis-generating only.",
+  "",
+  "This network is based on gene-centered public knowledge annotations and",
+  "first-degree relationships around HTT, ATXN1 and ATXN2.",
+  "",
+  "It does not use CAG repeat length, intermediate-allele status, STR-specific",
+  "functional measurements, repeat-QTL data, or experimental validation of",
+  "the repeat variants analyzed in this study.",
+  "",
+  "Accordingly, network proximity and shared annotations must not be described",
+  "as evidence of a CAG-specific molecular mechanism, mediation, causality,",
+  "or functional validation of the genetic association results."
+)
+
+writeLines(
+  interpretation_note,
+  con = file.path(
+    revision_dir,
+    "07_network_interpretation_note.txt"
+  )
+)
+
+cat("\n============================================================\n")
+cat("07 COMPLETE\n")
+cat("============================================================\n")
+cat(
+  "Network retained as contextual/hypothesis-generating analysis only.\n",
+  "No CAG-specific functional inference is performed.\n",
+  sep = ""
+)
+
+# Session info ------------------------------------------------------------------
 sessionInfo()

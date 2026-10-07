@@ -1,0 +1,4 @@
+gene,n_complete,n_raw1_gt_raw2,pct_raw1_gt_raw2,n_raw1_eq_raw2,n_derived_short_gt_long,min_short,max_short,min_long,max_long
+HTT,1598,4,0.2503128911138924,286,0,8,28,10,39
+ATXN1,1503,0,0,337,0,19,35,21,38
+ATXN2,1494,0,0,1119,0,13,27,22,34

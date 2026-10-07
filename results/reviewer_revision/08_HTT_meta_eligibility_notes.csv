@@ -1,0 +1,5 @@
+source,included_primary_meta,reason
+Present cohort,TRUE,Carrier-level counts available; all-BD phenotype used to match Ferrari; HTT IA definition 27-35 CAG.
+Ferrari et al. 2023,TRUE,Carrier-level BD and healthy-control counts published; HTT IA definition 27-35 CAG.
+Ramos et al. 2015,FALSE,Published main frequency tables are chromosome-level rather than carrier-level and are not directly harmonized with the present carrier-level endpoint.
+Present cohort BD-I subgroup,FALSE,Ferrari et al. do not publish HTT-IA carrier counts stratified by BD-I; therefore a direct BD-I meta-analysis cannot be performed from published data.

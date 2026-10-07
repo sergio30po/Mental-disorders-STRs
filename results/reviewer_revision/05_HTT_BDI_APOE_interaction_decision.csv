@@ -1,0 +1,2 @@
+minimum_cell_count,threshold,interaction_fitted,rule
+2,5,FALSE,HTT_IA x APOE_E4 interaction is fitted only if every diagnosis x HTT x APOE cell has n >= 5.

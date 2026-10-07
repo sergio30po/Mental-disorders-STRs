@@ -1,14 +1,16 @@
 # Script name: 06_Survival_age_analysis.R
 # ==============================================================================
-# Title: Clinical and survival analysis by genotype in psychiatric cohorts.
+# Title: Clinical age-at-onset and cross-sectional disease-duration analysis by genotype.
 
 # Author: Sergio Pérez Oliveira
 
-# Description: This script evaluates the association between STR-based genotype 
-#              classifications (HTT_CODE, ATXN1_CODE, ATXN2_CODE) and clinical 
-#              variables (age at onset, disease duration) in Schizophrenia (SCZ) 
-#              and bipolar disorder (BD) patients. Analyses include subgroup 
-#              comparisons within BD (e.g., BD-I, BD-CD) and survival models.
+# Description: This script evaluates the association between STR-based genotype
+#              classifications (HTT_CODE, ATXN1_CODE, ATXN2_CODE) and clinical
+#              variables (age at onset and observed disease duration) in
+#              schizophrenia (SCZ) and bipolar disorder (BD) patients.
+#              Disease duration is treated strictly as a cross-sectional clinical
+#              variable (age at last assessment minus age at onset), not as a
+#              time-to-event or progression endpoint.
 
 # Inputs:
 #   - Manually selected environment file with custom functions (.R)
@@ -16,13 +18,10 @@
 #   - Dataframes: DT, BD, SCZ, BD_I, BD_CD, BD_noCD
 
 # Outputs:
-#   - Descriptive statistics for age at onset and disease duration (mean ± SD)
-#   - Non-parametric tests (Wilcoxon, Kruskal-Wallis, Dunn with Holm correction)
-#   - Subgroup comparisons within BD and SCZ by genotype category
-#   - Survival objects using Surv() from survival package
-#   - Cox proportional hazards models (with covariates: SEX, SMOKER, genotype)
-#   - Log-rank tests and Kaplan-Meier plots (e.g., for ATXN2_CODE in BD)
-#   - Supplementary figure 2
+#   - Descriptive statistics and exploratory tests for age at onset
+#   - Cross-sectional disease-duration comparisons with prespecified FDR control
+#   - Machine-readable duration testing plan and master results tables
+#   - Supplementary Figure 2 without survival/Cox/Kaplan-Meier panels
 # ==============================================================================
 
 # Load environment ----
@@ -44,11 +43,12 @@ SCZ_P <- subset(SCZ, SCZ$PATHOLOGY_TYPE_BINARY == "SCZ")
 SCZ_CD <- subset(SCZ, SCZ$CD_BINARY == "CD")
 SCZ_NOCD <- subset(SCZ, SCZ$CD_BINARY == "No-CD")
 
-#CORRELATION TESTS ----
-cor.test(BD$ONSET_AGE,BD$DURATION,method = "spearman")
-cor.test(SCZ$ONSET_AGE,SCZ$DURATION,method = "spearman")
+# DESCRIPTIVE ONSET-AGE / OBSERVED-DURATION DEPENDENCY ----
+# This correlation is descriptive only. DURATION is not interpreted as progression.
+cor.test(BD$ONSET_AGE, BD$DURATION, method = "spearman", exact = FALSE)
+cor.test(SCZ$ONSET_AGE, SCZ$DURATION, method = "spearman", exact = FALSE)
 
-# Sup. Fig. 2A: Correlation plots (BD and SCZ) ----
+# Sup. Fig. 2A: Descriptive onset-age / observed-duration plots (BD and SCZ) ----
 cols_outcome <- c("BD" = "#8CBDE6", "SCZ" = "#F5A04D")
 
 make_cor_panel <- function(df, group = c("BD", "SCZ"),
@@ -99,1213 +99,802 @@ ggsave(
   width = 500, height = 160, units = "mm",
   dpi = 600, compression = "lzw"
 )
-# 1. AGE AT ONSET - DISEASE DURATION CORRELATIONS ----
-
-# BD - HTT
-mean_sd(BD, "HTT_CODE", "ONSET_AGE", "Age at onset BD")
-kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD)
-dunn <- dunnTest(BD$ONSET_AGE ~ BD$HTT_CODE, method = "holm")
-print(dunn, dunn.test.results = TRUE)
-
-mean_sd(BD_I, "HTT_CODE", "ONSET_AGE", "Age at onset BD-I")
-kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD_I)
-dunn <- dunnTest(BD_I$ONSET_AGE ~ BD_I$HTT_CODE, method = "holm")
-print(dunn, dunn.test.results = TRUE)
-
-mean_sd(BD_CD, "HTT_CODE", "ONSET_AGE", "Age at onset BD-CD")
-kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD_CD)
-
-mean_sd(BD_NOCD, "HTT_CODE", "ONSET_AGE", "Age at onset BD-NO-CD")
-kruskal.test(ONSET_AGE ~ HTT_CODE, data = BD_NOCD)
-
-# SCZ - HTT
-mean_sd(SCZ, "HTT_CODE", "ONSET_AGE", "Age at onset SCZ")
-wilcox.test(ONSET_AGE ~ HTT_CODE, data = SCZ)
-
-mean_sd(SCZ_P, "HTT_CODE", "ONSET_AGE", "Age at onset SCZ_P")
-kruskal.test(ONSET_AGE ~ HTT_CODE, data = SCZ_P)
-
-mean_sd(SCZ_CD, "HTT_CODE", "ONSET_AGE", "Age at onset SCZ_CD")
-kruskal.test(ONSET_AGE ~ HTT_CODE, data = SCZ_CD)
-
-mean_sd(SCZ_NOCD, "HTT_CODE", "ONSET_AGE", "Age at onset SCZ_NOCD")
-kruskal.test(ONSET_AGE ~ HTT_CODE, data = SCZ_NOCD)
-
-# BD - ATXN1
-mean_sd(BD, "ATXN1_CODE", "ONSET_AGE", "Age at onset BD")
-wilcox.test(ONSET_AGE ~ ATXN1_CODE, data = BD)
-
-mean_sd(BD_I, "ATXN1_CODE", "ONSET_AGE", "Age at onset BD-I")
-kruskal.test(ONSET_AGE ~ ATXN1_CODE, data = BD_I)
-
-mean_sd(BD_CD, "ATXN1_CODE", "ONSET_AGE", "Age at onset BD-CD")
-kruskal.test(ONSET_AGE ~ ATXN1_CODE, data = BD_CD)
-
-mean_sd(BD_NOCD, "ATXN1_CODE", "ONSET_AGE", "Age at onset BD-NO-CD")
-kruskal.test(ONSET_AGE ~ ATXN1_CODE, data = BD_NOCD)
-
-# SCZ - ATXN1
-mean_sd(SCZ, "ATXN1_CODE", "ONSET_AGE", "Age at onset SCZ")
-wilcox.test(ONSET_AGE ~ ATXN1_CODE, data = SCZ)
-
-mean_sd(SCZ_P, "ATXN1_CODE", "ONSET_AGE", "Age at onset SCZ_P")
-kruskal.test(ONSET_AGE ~ ATXN1_CODE, data = SCZ_P)
-
-mean_sd(SCZ_CD, "ATXN1_CODE", "ONSET_AGE", "Age at onset SCZ_CD")
-kruskal.test(ONSET_AGE ~ ATXN1_CODE, data = SCZ_CD)
-
-mean_sd(SCZ_NOCD, "ATXN1_CODE", "ONSET_AGE", "Age at onset SCZ_NOCD")
-kruskal.test(ONSET_AGE ~ ATXN1_CODE, data = SCZ_NOCD)
-
-# BD - ATXN2
-mean_sd(BD, "ATXN2_CODE", "ONSET_AGE", "Age at onset BD")
-wilcox.test(ONSET_AGE ~ ATXN2_CODE, data = BD)
-
-mean_sd(BD_I, "ATXN2_CODE", "ONSET_AGE", "Age at onset BD-I")
-wilcox.test(ONSET_AGE ~ ATXN2_CODE, data = BD_I)
-
-mean_sd(BD_CD, "ATXN2_CODE", "ONSET_AGE", "Age at onset BD-CD")
-wilcox.test(ONSET_AGE ~ ATXN2_CODE, data = BD_CD)
-
-mean_sd(BD_NOCD, "ATXN2_CODE", "ONSET_AGE", "Age at onset BD-NO-CD")
-kruskal.test(ONSET_AGE ~ ATXN2_CODE, data = BD_NOCD)
-
-# SCZ - ATXN2
-mean_sd(SCZ, "ATXN2_CODE", "ONSET_AGE", "Age at onset SCZ")
-kruskal.test(ONSET_AGE ~ ATXN2_CODE, data = SCZ)
-
-mean_sd(SCZ_P, "ATXN2_CODE", "ONSET_AGE", "Age at onset SCZ_P")
-kruskal.test(ONSET_AGE ~ ATXN2_CODE, data = SCZ_P)
-
-mean_sd(SCZ_CD, "ATXN2_CODE", "ONSET_AGE", "Age at onset SCZ_CD")
-kruskal.test(ONSET_AGE ~ ATXN2_CODE, data = SCZ_CD)
-
-mean_sd(SCZ_NOCD, "ATXN2_CODE", "ONSET_AGE", "Age at onset SCZ_NOCD")
-kruskal.test(ONSET_AGE ~ ATXN2_CODE, data = SCZ_NOCD)
-
-#BD APOE
-
-mean_sd(BD, "APOE_E4", "ONSET_AGE", "Age at onset APOE E4")
-wilcox.test(ONSET_AGE ~ APOE_E4, data = BD)
-rank_biserial(ONSET_AGE ~ APOE_E4, data = BD)
-
-mean_sd(BD_I, "APOE_E4", "ONSET_AGE", "Age at onset BD-I")
-wilcox.test(ONSET_AGE ~ APOE_E4, data = BD_I)
-rank_biserial(ONSET_AGE ~ APOE_E4, data = BD_I)
-
-mean_sd(BD_II, "APOE_E4", "DURATION", "Duration BD_II")
-wilcox.test(ONSET_AGE ~ APOE_E4, data = BD_II)
-rank_biserial(ONSET_AGE ~ APOE_E4, data = BD_II)
-
-mean_sd(BD_CD, "APOE_E4", "ONSET_AGE", "Age at onset BD-CD")
-wilcox.test(ONSET_AGE ~ APOE_E4, data = BD_CD)
-rank_biserial(ONSET_AGE ~ APOE_E4, data = BD_CD)
-
-mean_sd(BD_NOCD, "APOE_E4", "ONSET_AGE", "Age at onset BD-NO-CD")
-wilcox.test(ONSET_AGE ~ APOE_E4, data = BD_NOCD)
-rank_biserial(ONSET_AGE ~ APOE_E4, data = BD_NOCD)
-
-#SCZ APOE
-mean_sd(SCZ, "APOE_E4", "ONSET_AGE", "Age at onset SCZ")
-wilcox.test(ONSET_AGE ~ APOE_E4, data = SCZ)
-rank_biserial(ONSET_AGE ~ APOE_E4, data = SCZ)
-
-mean_sd(SCZ_P, "APOE_E4", "ONSET_AGE", "Age at onset SCZ_P")
-wilcox.test(ONSET_AGE ~ APOE_E4, data = SCZ_P)
-rank_biserial(ONSET_AGE ~ APOE_E4, data = SCZ_P)
-
-mean_sd(SCZ_CD, "APOE_E4", "ONSET_AGE", "Age at onset SCZ_CD")
-wilcox.test(ONSET_AGE ~ APOE_E4, data = SCZ_CD)
-rank_biserial(ONSET_AGE ~ APOE_E4, data = SCZ_CD)
-
-mean_sd(SCZ_NOCD, "APOE_E4", "ONSET_AGE", "Age at onset SCZ_NOCD")
-wilcox.test(ONSET_AGE ~ APOE_E4, data = SCZ_NOCD)
-rank_biserial(ONSET_AGE ~ APOE_E4, data = SCZ_NOCD)
-# 2. AGE-OF-ONSET MODELING ----
-# Linear  models within BD and within SCZ.
-# Genes: HTT, ATXN1, ATXN2
+# 1. AGE-AT-ONSET ANALYSIS ======================================================
 #
-# For EACH model:
-#   - Full model: covariates + genetic block (linear + quadratic + interaction)
-#   - Null model: covariates only (always retained)
-#   - Global test of genetic block: nested-model ANOVA (F-test)
-#   - AIC + delta AIC
-#   - Optional stepwise backward selection (exploratory) restricted to genetics
+# Reviewer-driven revision:
+#   Age at onset is retained as a clinical outcome, but all genetic analyses are
+#   treated as exploratory and multiple testing is controlled explicitly.
 #
-# IMPORTANT:
-#   - Do NOT use exponentiate=TRUE for lm() (no ORs here).
-#   - Report p-values for genetic terms or for the global F-test (full vs null).
+# Two complementary exploratory families are evaluated:
+#   A) categorical IA vs NORMAL comparisons (HTT, ATXN1, ATXN2; BD and SCZ);
+#   B) continuous CAG gene-block models (short, long, quadratic and interaction
+#      terms; HTT, ATXN1, ATXN2; BD and SCZ), adjusted for SEX, COFFEE, SMOKER
+#      and APOE_E4.
+#
+# Expanded carriers are excluded gene-by-gene from these inferential analyses
+# because they are clinically distinct rare observations and are described
+# separately in the manuscript.
+#
+# No stepwise selection is used in the reviewer analysis. For the continuous CAG
+# models, inference is based on the GLOBAL nested-model F-test for the complete
+# gene block. Individual polynomial terms are not interpreted unless the global
+# block is supported.
 
-# - 2.1 Full model Age of onset and IA: fit + step only genes -----
-fit_onset_step_genes <- function(df,
-                                 outcome = "ONSET_AGE",
-                                 covars = c("SEX","COFFEE","SMOKER","APOE_E4"),
-                                 genes  = c("HTT_CODE","ATXN1_CODE","ATXN2_CODE")) {
-  
-  vars_needed <- c(outcome, covars, genes)
-  
-  d <- df %>%
-    dplyr::select(all_of(vars_needed)) %>%
-    dplyr::filter(if_all(everything(), ~ !is.na(.))) %>%
-    dplyr::mutate(
-      SEX      = droplevels(factor(SEX)),
-      COFFEE   = droplevels(factor(COFFEE)),
-      SMOKER   = droplevels(factor(SMOKER)),
-      HTT_CODE = droplevels(factor(HTT_CODE)),
-      ATXN1_CODE= droplevels(factor(ATXN1_CODE)),
-      ATXN2_CODE= droplevels(factor(ATXN2_CODE))
+revision_dir <- file.path("results", "reviewer_revision")
+if (!dir.exists(revision_dir)) {
+  dir.create(revision_dir, recursive = TRUE)
+}
+
+# ------------------------------------------------------------------------------
+# 1A. Categorical IA vs NORMAL age-at-onset comparisons
+# ------------------------------------------------------------------------------
+
+run_onset_binary <- function(data,
+                             group_col,
+                             positive = "IA",
+                             reference = "NORMAL",
+                             predictor,
+                             cohort_scope,
+                             family_id = "ONSET_IA_EXPLORATORY",
+                             adjustment_method = "BH") {
+
+  needed <- c("ONSET_AGE", group_col)
+  missing_cols <- setdiff(needed, names(data))
+  if (length(missing_cols) > 0) {
+    stop(
+      "Missing column(s) in ", cohort_scope, ": ",
+      paste(missing_cols, collapse = ", "),
+      call. = FALSE
     )
-  
-  f_lower <- as.formula(paste(outcome, "~", paste(covars, collapse = " + ")))
-  f_upper <- as.formula(paste(outcome, "~", paste(c(covars, genes), collapse = " + ")))
-  
-  m_full  <- lm(f_upper, data = d)
-  
-  # Backward step restricted to genes: cannot drop covariates
-  m_step <- step(
-    object    = m_full,
-    scope     = list(lower = f_lower, upper = f_upper),
-    direction = "backward",
-    trace     = 0
-  )
-  
-  list(
-    data = d,
-    full = m_full,
-    step = m_step,
-    AIC  = AIC(m_full, m_step)
-  )
-}
+  }
 
-# BD
-res_BD  <- fit_onset_step_genes(df = BD)
-summary(res_BD$step)
-res_BD$AIC
+  d <- data %>%
+    dplyr::transmute(
+      onset_age = as.numeric(ONSET_AGE),
+      group = as.character(.data[[group_col]])
+    ) %>%
+    dplyr::filter(
+      !is.na(onset_age),
+      is.finite(onset_age),
+      group %in% c(reference, positive)
+    )
 
-res_BD_CD  <- fit_onset_step_genes(df = BD_CD)
-summary(res_BD_CD$step)
-res_BD_CD$AIC
+  x_ref <- d$onset_age[d$group == reference]
+  x_pos <- d$onset_age[d$group == positive]
 
-# SCZ
-res_SCZ <- fit_onset_step_genes(df = SCZ)
-summary(res_SCZ$step)
-res_SCZ$AIC
+  n_ref <- length(x_ref)
+  n_pos <- length(x_pos)
 
-res_SCZ_CD  <- fit_onset_step_genes(df = SCZ_CD)
-summary(res_SCZ_CD$step)
-res_SCZ_CD$AIC
-
-# - 2.2 Full model Age of onset and CAG repeats: fit + step only genes -----
-
-drop_na <- function(df, vars) df %>% filter(if_all(all_of(vars), ~ !is.na(.)))
-
-block_terms <- function(s, l) c(
-  s, paste0("I(", s, "^2)"),
-  l, paste0("I(", l, "^2)"),
-  paste0(s, ":", l)
-)
-
-enforce_block_hierarchy <- function(keep, s, l) {
-  qs <- paste0("I(", s, "^2)")
-  ql <- paste0("I(", l, "^2)")
-  it <- paste0(s, ":", l)
-  
-  keep <- unique(keep)
-  if (qs %in% keep && !(s %in% keep)) keep <- c(keep, s)
-  if (ql %in% keep && !(l %in% keep)) keep <- c(keep, l)
-  if (it %in% keep) keep <- unique(c(keep, s, l))
-  unique(keep)
-}
-
-fit_onset_multiblock <- function(df, outcome, covars, blocks_named, do_step = TRUE) {
-  
-  # factors for covars if present
-  for (v in intersect(covars, names(df))) df[[v]] <- factor(df[[v]])
-  
-  # vars needed
-  gene_vars <- unlist(lapply(blocks_named, \(b) c(b$short, b$long)))
-  d <- drop_na(df, unique(c(outcome, covars, gene_vars)))
-  
-  # formulas
-  block_rhs <- unlist(lapply(blocks_named, \(b) block_terms(b$short, b$long)))
-  f_null <- as.formula(paste(outcome, "~", paste(covars, collapse = " + ")))
-  f_full <- as.formula(paste(outcome, "~", paste(c(covars, block_rhs), collapse = " + ")))
-  
-  m_null <- lm(f_null, data = d)
-  m_full <- lm(f_full, data = d)
-  
-  out <- list(
-    data = d,
-    null = m_null,
-    full = m_full,
-    an_full_vs_null = anova(m_null, m_full),
-    step = NULL,
-    an_step_vs_null = NULL
-  )
-  
-  if (!isTRUE(do_step)) return(out)
-  
-  # step: only allow removing gene terms (covars fixed by scope lower)
-  m_step_raw <- step(m_full, scope = list(lower = f_null, upper = f_full),
-                     direction = "backward", trace = 0)
-  sel <- attr(terms(m_step_raw), "term.labels")
-  
-  # keep covars always
-  gene_all <- unique(block_rhs)
-  gen_sel <- sel[sel %in% gene_all]
-  
-  # hierarchy per block
-  gen_sel_h <- gen_sel
-  for (b in blocks_named) gen_sel_h <- enforce_block_hierarchy(gen_sel_h, b$short, b$long)
-  
-  rhs <- c(covars, gen_sel_h)
-  f_step <- as.formula(paste(outcome, "~", paste(rhs, collapse = " + ")))
-  m_step <- lm(f_step, data = d)
-  
-  out$step <- m_step
-  out$an_step_vs_null <- anova(m_null, m_step)
-  out
-}
-
-# BD
-blocks <- list(
-  HTT  = list(short="ALLELE1_HTT",  long="ALLELE2_HTT"),
-  ATXN1= list(short="ALLELE1_ATXN1", long="ALLELE2_ATXN1"),
-  ATXN2= list(short="ALLELE1_ATXN2", long="ALLELE2_ATXN2")
-)
-covars_onset<-c("SEX","COFFEE","SMOKER","APOE_E4")
-
-res_BD <- fit_onset_multiblock(BD, "ONSET_AGE", covars_onset, blocks, do_step = TRUE)
-
-res_BD$an_full_vs_null
-res_BD$an_step_vs_null
-summary(res_BD$step)
-
-#ATXN1 final model
-f_atxn1 <- as.formula(paste(
-  "ONSET_AGE ~", paste(covars_onset, collapse=" + "), "+",
-  paste(block_terms("ALLELE1_ATXN1","ALLELE2_ATXN1"), collapse=" + ")
-))
-m_atxn1_BD <- lm(f_atxn1, data = drop_na(BD, c("ONSET_AGE", covars_onset, "ALLELE1_ATXN1","ALLELE2_ATXN1")))
-anova(lm(as.formula(paste("ONSET_AGE ~", paste(covars_onset, collapse=" + "))), data = model.frame(m_atxn1_BD)),
-      m_atxn1_BD)
-summary(m_atxn1_BD)
-
-# SCZ
-
-res_SCZ <- fit_onset_multiblock(SCZ, "ONSET_AGE", covars_onset, blocks, do_step = TRUE)
-
-res_SCZ$an_full_vs_null
-res_SCZ$an_step_vs_null
-summary(res_SCZ$step)
-
-#ATXN1 final model
-f_atxn1 <- as.formula(paste(
-  "ONSET_AGE ~", paste(covars_onset, collapse=" + "), "+",
-  paste(block_terms("ALLELE1_ATXN1","ALLELE2_ATXN1"), collapse=" + ")
-))
-m_atxn1_SCZ <- lm(f_atxn1, data = drop_na(SCZ, c("ONSET_AGE", covars_onset, "ALLELE1_ATXN1","ALLELE2_ATXN1")))
-anova(lm(as.formula(paste("ONSET_AGE ~", paste(covars_onset, collapse=" + "))), data = model.frame(m_atxn1_SCZ)),
-      m_atxn1_SCZ)
-summary(m_atxn1_SCZ)
-
-#Sup. Fig. 2B : Age of onset in BD vs ATXN1 ----
-# Two clearly separated BD blues (light vs dark)
-col_long <- c(
-  "Normal (<33)"         = "#8CBDE6",  # light BD blue
-  "Intermediate (33–38)" = "#163A5F"   # dark BD blue
-)
-
-# References (fixed values used for predictions)
-ref_SEX    <- "Female"
-ref_COFFEE <- "Coffee"
-ref_SMOKER <- "Smoking"
-
-# ---- Data prep 
-BD_atxn1 <- BD %>%
-  dplyr::select(
-    ONSET_AGE, SEX, COFFEE, SMOKER,
-    ALLELE1_ATXN1, ALLELE2_ATXN1
-  ) %>%
-  dplyr::filter(
-    !is.na(ONSET_AGE),
-    !is.na(SEX), !is.na(COFFEE), !is.na(SMOKER),
-    !is.na(ALLELE1_ATXN1), !is.na(ALLELE2_ATXN1)
-  ) %>%
-  mutate(
-    SEX    = factor(SEX),
-    COFFEE = factor(COFFEE),
-    SMOKER = factor(SMOKER),
-    long_bin = case_when(
-      ALLELE2_ATXN1 < 33 ~ "Normal (<33)",
-      ALLELE2_ATXN1 >= 33 & ALLELE2_ATXN1 <= 38 ~ "Intermediate (33–38)",
-      TRUE ~ NA_character_
-    ),
-    long_bin = factor(long_bin, levels = c("Normal (<33)", "Intermediate (33–38)"))
-  ) %>%
-  filter(!is.na(long_bin))
-
-# ---- Model (as in your step-selected structure for ATXN1)
-m_atxn1 <- lm(
-  ONSET_AGE ~ SEX + COFFEE + SMOKER +
-    ALLELE1_ATXN1 + I(ALLELE1_ATXN1^2) +
-    ALLELE2_ATXN1 + I(ALLELE2_ATXN1^2) +
-    ALLELE1_ATXN1:ALLELE2_ATXN1,
-  data = BD_atxn1
-)
-
-# ---- Prediction grid over OBSERVED short-allele range
-x_min_data <- min(BD_atxn1$ALLELE1_ATXN1, na.rm = TRUE)
-x_max_data <- max(BD_atxn1$ALLELE1_ATXN1, na.rm = TRUE)
-x_grid <- seq(x_min_data, x_max_data, by = 0.05)
-
-# Representative long-allele value per bin (median within bin)
-bin_reps <- BD_atxn1 %>%
-  group_by(long_bin) %>%
-  summarise(long_rep = median(ALLELE2_ATXN1, na.rm = TRUE), .groups = "drop")
-
-# Baseline for centering (median alleles in the data)
-a1_ref <- as.numeric(median(BD_atxn1$ALLELE1_ATXN1, na.rm = TRUE))
-a2_ref <- as.numeric(median(BD_atxn1$ALLELE2_ATXN1, na.rm = TRUE))
-
-# Build newdata for prediction
-newdat <- expand.grid(
-  ALLELE1_ATXN1 = x_grid,
-  long_bin = levels(BD_atxn1$long_bin),
-  stringsAsFactors = FALSE
-) %>%
-  left_join(bin_reps, by = "long_bin") %>%
-  mutate(
-    ALLELE2_ATXN1 = long_rep,
-    SEX    = factor(ref_SEX,    levels = levels(BD_atxn1$SEX)),
-    COFFEE = factor(ref_COFFEE, levels = levels(BD_atxn1$COFFEE)),
-    SMOKER = factor(ref_SMOKER, levels = levels(BD_atxn1$SMOKER))
-  )
-
-# Predict + SE
-pred <- predict(m_atxn1, newdata = newdat, se.fit = TRUE)
-newdat$fit <- as.numeric(pred$fit)
-newdat$se  <- as.numeric(pred$se.fit)
-
-# Baseline prediction used to center y-axis
-base_dat <- data.frame(
-  ALLELE1_ATXN1 = a1_ref,
-  ALLELE2_ATXN1 = a2_ref,
-  SEX    = factor(ref_SEX,    levels = levels(BD_atxn1$SEX)),
-  COFFEE = factor(ref_COFFEE, levels = levels(BD_atxn1$COFFEE)),
-  SMOKER = factor(ref_SMOKER, levels = levels(BD_atxn1$SMOKER))
-)
-base_fit <- as.numeric(predict(m_atxn1, newdata = base_dat))
-
-# Centered effects (delta) + centered CI
-newdat <- newdat %>%
-  mutate(
-    delta = fit - base_fit,
-    lo = (fit - 1.96 * se) - base_fit,
-    hi = (fit + 1.96 * se) - base_fit
-  )
-
-# ---- Plot (single legend: fill drives legend; linetype legend removed)
-lt_map <- c("Normal (<33)" = "dashed", "Intermediate (33–38)" = "solid")
-
-p_atxn1 <- ggplot() +
-  # CI ribbons (colored by long-allele bin)
-  geom_ribbon(
-    data = newdat,
-    aes(
-      x = ALLELE1_ATXN1, ymin = lo, ymax = hi,
-      fill = long_bin, group = long_bin
-    ),
-    alpha = 0.25,
-    color = NA
-  ) +
-  # Model lines (black; linetype by bin)
-  geom_line(
-    data = newdat,
-    aes(
-      x = ALLELE1_ATXN1, y = delta,
-      linetype = long_bin, group = long_bin
-    ),
-    color = "black",
-    linewidth = 0.9
-  ) +
-  # Points (colored by bin; black border)
-  geom_point(
-    data = BD_atxn1,
-    aes(
-      x = ALLELE1_ATXN1,
-      y = ONSET_AGE - base_fit,
-      fill = long_bin
-    ),
-    shape = 21,
-    color = "black",
-    stroke = 0.25,
-    alpha = 0.45,
-    size = 1.6,
-    position = position_jitter(width = 0.10, height = 0)
-  ) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "grey55", linewidth = 0.6) +
-  labs(
-    #subtitle = paste0(
-    #  "Y-axis shows the change in model-predicted age at onset relative to an individual with median alleles (short=", a1_ref,
-    #  ", long=", a2_ref, "), female, with coffee intake, and somker."
-    #),
-    x = expression(italic("ATXN1") * " short allele (CAG repeats)"),
-    y = "Change in predicted age at onset (years)",
-    fill = expression(italic("ATXN1") * " long allele group")
-  ) +
-  scale_fill_manual(values = col_long) +
-  scale_linetype_manual(values = lt_map) +
-  # One legend only (fill). Keep linetype mapping but hide its guide.
-  guides(
-    linetype = "none",
-    fill = guide_legend(
-      title = expression(italic("ATXN1") * " long allele group"),
-      override.aes = list(
-        linetype = c("dashed", "solid"),
-        color = "black"
+  if (n_ref < 2L || n_pos < 2L) {
+    return(
+      tibble::tibble(
+        family_id = family_id,
+        adjustment_method = adjustment_method,
+        cohort_scope = cohort_scope,
+        predictor = predictor,
+        group_variable = group_col,
+        positive = positive,
+        reference = reference,
+        contrast = paste0(positive, " vs ", reference),
+        n_positive = n_pos,
+        n_reference = n_ref,
+        n_total = n_pos + n_ref,
+        mean_positive = if (n_pos > 0) mean(x_pos) else NA_real_,
+        sd_positive = if (n_pos > 1) stats::sd(x_pos) else NA_real_,
+        median_positive = if (n_pos > 0) stats::median(x_pos) else NA_real_,
+        iqr_positive = if (n_pos > 0) stats::IQR(x_pos) else NA_real_,
+        mean_reference = if (n_ref > 0) mean(x_ref) else NA_real_,
+        sd_reference = if (n_ref > 1) stats::sd(x_ref) else NA_real_,
+        median_reference = if (n_ref > 0) stats::median(x_ref) else NA_real_,
+        iqr_reference = if (n_ref > 0) stats::IQR(x_ref) else NA_real_,
+        median_difference = if (n_pos > 0 && n_ref > 0) {
+          stats::median(x_pos) - stats::median(x_ref)
+        } else {
+          NA_real_
+        },
+        rank_biserial = NA_real_,
+        p_raw = NA_real_,
+        estimable = FALSE
       )
     )
-  ) +
-  coord_cartesian(
-    xlim = c(x_min_data, x_max_data),
-    ylim = c(-30, 60),
-    clip = "on"
-  ) +
-  theme_classic(base_size = 12) +
-  theme(
-    legend.position = c(0.86, 0.82),
-    legend.justification = c(1, 0),
-    legend.background = element_rect(fill = "white", color = "grey80", linewidth = 0.3),
-    legend.key = element_rect(fill = "white", color = NA),
-    legend.title = element_text(size = 10),
-    legend.text = element_text(size = 9),
-    plot.margin = margin(6, 6, 6, 6)
-  )
-
-p_atxn1
-
-ggsave(
-  filename = file.path(fig_dir, "Sup_Fig_2B.tiff"),
-  plot = p_atxn1,
-  device = "tiff",
-  width = 180, height = 120, units = "mm",
-  dpi = 600, compression = "lzw"
-)
-
-
-# 3. DURATION CORRELATIONS ----
-
-# BD - HTT
-mean_sd(BD, "HTT_CODE", "DURATION", "Duration BD")
-kruskal.test(DURATION ~ HTT_CODE, data = BD)
-
-mean_sd(BD_I, "HTT_CODE", "DURATION", "Duration BD-I")
-kruskal.test(DURATION ~ HTT_CODE, data = BD_I)
-
-mean_sd(BD_CD, "HTT_CODE", "DURATION", "Duration BD-CD")
-kruskal.test(DURATION ~ HTT_CODE, data = BD_CD)
-
-mean_sd(BD_NOCD, "HTT_CODE", "DURATION", "Duration BD-NO-CD")
-kruskal.test(DURATION ~ HTT_CODE, data = BD_NOCD)
-
-# SCZ - HTT
-mean_sd(SCZ, "HTT_CODE", "DURATION", "Duration SCZ")
-wilcox.test(DURATION ~ HTT_CODE, data = SCZ)
-
-mean_sd(SCZ_P, "HTT_CODE", "DURATION", "Duration SCZ_P")
-kruskal.test(DURATION ~ HTT_CODE, data = SCZ_P)
-
-mean_sd(SCZ_CD, "HTT_CODE", "DURATION", "Duration SCZ-CD")
-kruskal.test(DURATION ~ HTT_CODE, data = SCZ_CD)
-
-mean_sd(SCZ_NOCD, "HTT_CODE", "DURATION", "Duration SCZ-NO-CD")
-kruskal.test(DURATION ~ HTT_CODE, data = SCZ_NOCD)
-
-# BD - ATXN1
-mean_sd(BD, "ATXN1_CODE", "DURATION", "Duration BD")
-wilcox.test(DURATION ~ ATXN1_CODE, data = BD)
-
-mean_sd(BD_I, "ATXN1_CODE", "DURATION", "Duration BD-I")
-kruskal.test(DURATION ~ ATXN1_CODE, data = BD_I)
-
-mean_sd(BD_CD, "ATXN1_CODE", "DURATION", "Duration BD-CD")
-kruskal.test(DURATION ~ ATXN1_CODE, data = BD_CD)
-
-mean_sd(BD_NOCD, "ATXN1_CODE", "DURATION", "Duration BD-NO-CD")
-kruskal.test(DURATION ~ ATXN1_CODE, data = BD_NOCD)
-
-# SCZ - ATXN1
-mean_sd(SCZ, "ATXN1_CODE", "DURATION", "Duration SCZ")
-wilcox.test(DURATION ~ ATXN1_CODE, data = SCZ)
-
-mean_sd(SCZ_P, "ATXN1_CODE", "DURATION", "Duration SCZ_P")
-kruskal.test(DURATION ~ ATXN1_CODE, data = SCZ_P)
-
-mean_sd(SCZ_CD, "ATXN1_CODE", "DURATION", "Duration SCZ-CD")
-kruskal.test(DURATION ~ ATXN1_CODE, data = SCZ_CD)
-
-mean_sd(SCZ_NOCD, "ATXN1_CODE", "DURATION", "Duration SCZ-NO-CD")
-kruskal.test(DURATION ~ ATXN1_CODE, data = SCZ_NOCD)
-
-# BD - ATXN2
-mean_sd(BD, "ATXN2_CODE", "DURATION", "Duration BD")
-wilcox.test(DURATION ~ ATXN2_CODE, data = BD)
-
-mean_sd(BD_I, "ATXN2_CODE", "DURATION", "Duration BD-I")
-wilcox.test(DURATION ~ ATXN2_CODE, data = BD_I)
-
-mean_sd(BD_CD, "ATXN2_CODE", "DURATION", "Duration BD-CD")
-wilcox.test(DURATION ~ ATXN2_CODE, data = BD_CD)
-
-mean_sd(BD_NOCD, "ATXN2_CODE", "DURATION", "Duration BD-NoCD")
-wilcox.test(DURATION ~ ATXN2_CODE, data = BD_NOCD)
-
-# SCZ - ATXN2
-mean_sd(SCZ, "ATXN2_CODE", "DURATION", "Duration SCZ")
-kruskal.test(DURATION ~ ATXN2_CODE, data = SCZ)
-
-mean_sd(SCZ_P, "ATXN2_CODE", "DURATION", "Duration SCZ_P")
-kruskal.test(DURATION ~ ATXN2_CODE, data = SCZ_P)
-
-mean_sd(SCZ_CD, "ATXN2_CODE", "DURATION", "Duration SCZ-CD")
-kruskal.test(DURATION ~ ATXN2_CODE, data = SCZ_CD)
-
-mean_sd(SCZ_NOCD, "ATXN2_CODE", "DURATION", "Duration SCZ-NO-CD")
-
-# BD - APOE
-mean_sd(BD, "APOE_E4", "DURATION", "Duration BD")
-wilcox.test(DURATION ~ APOE_E4, data = BD)
-rank_biserial(DURATION ~ APOE_E4, data = BD)
-
-mean_sd(BD_I, "APOE_E4", "DURATION", "Duration BD-I")
-wilcox.test(DURATION ~ APOE_E4, data = BD_I)
-rank_biserial(DURATION ~ APOE_E4, data = BD_I)
-
-mean_sd(BD_II, "APOE_E4", "DURATION", "Duration BD_II")
-wilcox.test(DURATION ~ APOE_E4, data = BD_II)
-rank_biserial(DURATION ~ APOE_E4, data = BD_II)
-
-mean_sd(BD_CD, "APOE_E4", "DURATION", "Duration BD-CD")
-wilcox.test(DURATION ~ APOE_E4, data = BD_CD)
-rank_biserial(DURATION ~ APOE_E4, data = BD_CD)
-
-mean_sd(BD_NOCD, "APOE_E4", "DURATION", "Duration BD-NoCD")
-wilcox.test(DURATION ~ APOE_E4, data = BD_NOCD)
-rank_biserial(DURATION ~ APOE_E4, data = BD_NOCD)
-
-# SCZ - APOE
-mean_sd(SCZ, "APOE_E4", "DURATION", "Duration SCZ")
-wilcox.test(DURATION ~ APOE_E4, data = SCZ)
-rank_biserial(DURATION ~ APOE_E4, data = SCZ)
-
-mean_sd(SCZ_P, "APOE_E4", "DURATION", "Duration SCZ_P")
-wilcox.test(DURATION ~ APOE_E4, data = SCZ_P)
-rank_biserial(DURATION ~ APOE_E4, data = SCZ_P)
-
-mean_sd(SCZ_CD, "APOE_E4", "DURATION", "Duration SCZ-CD")
-wilcox.test(DURATION ~ APOE_E4, data = SCZ_CD)
-rank_biserial(DURATION ~ APOE_E4, data = SCZ_CD)
-
-mean_sd(SCZ_NOCD, "APOE_E4", "DURATION", "Duration SCZ-NO-CD")
-wilcox.test(DURATION ~ APOE_E4, data = SCZ_CD)
-rank_biserial(DURATION ~ APOE_E4, data = SCZ_CD)
-
-# 4. SURVIVAL CURVES ----
-# BD COX MODEL----
-# 1) Data
-vars_needed <- c(
-  "DURATION","SEX","SMOKER","COFFEE","APOE_E4",
-  "ALLELE1_HTT","ALLELE2_HTT",
-  "ALLELE1_ATXN1","ALLELE2_ATXN1",
-  "ALLELE1_ATXN2","ALLELE2_ATXN2"
-)
-
-BD_cox <- BD %>%
-  select(all_of(vars_needed)) %>%
-  filter(if_all(everything(), ~ !is.na(.))) %>%
-  mutate(
-    SEX = factor(SEX),
-    SMOKER = factor(SMOKER),
-    COFFEE = factor(COFFEE),
-    APOE_E4 = factor(APOE_E4)
-  )
-
-surv_object <- Surv(time = BD_cox$DURATION, event = rep(1, nrow(BD_cox)))
-covars <- c("SEX","SMOKER","COFFEE","APOE_E4")
-
-# 2) Gene blocks (ALL terms per gene)
-block_string <- function(short, long) {
-  paste(
-    short, paste0("I(", short, "^2)"),
-    long,  paste0("I(", long,  "^2)"),
-    paste0(short, ":", long),
-    sep = " + "
-  )
-}
-
-blocks <- list(
-  HTT  = block_string("ALLELE1_HTT",  "ALLELE2_HTT"),
-  ATXN1= block_string("ALLELE1_ATXN1","ALLELE2_ATXN1"),
-  ATXN2= block_string("ALLELE1_ATXN2","ALLELE2_ATXN2")
-)
-
-fit_from_blocks <- function(keep_blocks) {
-  rhs <- c(covars, unname(blocks[keep_blocks]))
-  f <- as.formula(paste0("surv_object ~ ", paste(rhs, collapse = " + ")))
-  coxph(f, data = BD_cox)
-}
-
-# 3) Backward AIC by BLOCK (genes only)
-keep <- names(blocks)
-m_step <- fit_from_blocks(keep)
-aic_step <- AIC(m_step)
-
-repeat {
-  if (length(keep) == 0) break
-  
-  tried <- lapply(keep, function(b) {
-    keep2 <- setdiff(keep, b)
-    fit2 <- fit_from_blocks(keep2)
-    data.frame(drop_block = b, AIC = AIC(fit2), stringsAsFactors = FALSE)
-  }) |> bind_rows()
-  
-  best <- tried[which.min(tried$AIC), ]
-  if (best$AIC + 1e-10 < aic_step) {
-    keep <- setdiff(keep, best$drop_block)
-    m_step <- fit_from_blocks(keep)
-    aic_step <- best$AIC
-  } else {
-    break
   }
-}
 
-
-# 4) Null / Full for comparison
-m_null <- coxph(as.formula(paste0("surv_object ~ ", paste(covars, collapse = " + "))), data = BD_cox)
-
-m_full <- fit_from_blocks(names(blocks))
-
-# 5) Output + comparisons
-
-cat("\nAIC (null):\n"); print(AIC(m_null))
-cat("\nAIC (full):\n"); print(AIC(m_full))
-cat("\nAIC (step-selected, blockwise):\n"); print(AIC(m_step))
-
-cat("\nGenetic blocks retained after step:\n")
-print(keep)
-
-cat("\nFinal model summary:\n")
-print(summary(m_step))
-
-cat("\nModel comparisons (LRT):\n")
-cat("\n- null vs full:\n"); print(anova(m_null, m_full, test = "LRT"))
-cat("\n- null vs step:\n"); print(anova(m_null, m_step, test = "LRT"))
-cat("\n- step vs full:\n"); print(anova(m_step, m_full, test = "LRT"))
-
-SCZ_cox <- SCZ %>%
-  select(all_of(vars_needed)) %>%
-  filter(if_all(everything(), ~ !is.na(.))) %>%
-  mutate(
-    SEX = factor(SEX),
-    SMOKER = factor(SMOKER),
-    COFFEE = factor(COFFEE),
-    APOE_E4 = factor(APOE_E4)
+  wt <- stats::wilcox.test(
+    x = x_pos,
+    y = x_ref,
+    alternative = "two.sided",
+    exact = FALSE,
+    correct = FALSE
   )
 
+  pair_diff <- outer(x_pos, x_ref, FUN = "-")
+  r_rb <- (
+    sum(pair_diff > 0, na.rm = TRUE) -
+      sum(pair_diff < 0, na.rm = TRUE)
+  ) / (n_pos * n_ref)
 
-surv_object <- Surv(time = SCZ_cox$DURATION, event = rep(1, nrow(SCZ_cox)))
-fit_from_blocks <- function(keep_blocks) {
-  rhs <- c(covars, unname(blocks[keep_blocks]))
-  f <- as.formula(paste0("surv_object ~ ", paste(rhs, collapse = " + ")))
-  coxph(f, data = SCZ_cox)
+  tibble::tibble(
+    family_id = family_id,
+    adjustment_method = adjustment_method,
+    cohort_scope = cohort_scope,
+    predictor = predictor,
+    group_variable = group_col,
+    positive = positive,
+    reference = reference,
+    contrast = paste0(positive, " vs ", reference),
+    n_positive = n_pos,
+    n_reference = n_ref,
+    n_total = n_pos + n_ref,
+    mean_positive = mean(x_pos),
+    sd_positive = stats::sd(x_pos),
+    median_positive = stats::median(x_pos),
+    iqr_positive = stats::IQR(x_pos),
+    mean_reference = mean(x_ref),
+    sd_reference = stats::sd(x_ref),
+    median_reference = stats::median(x_ref),
+    iqr_reference = stats::IQR(x_ref),
+    median_difference = stats::median(x_pos) - stats::median(x_ref),
+    rank_biserial = r_rb,
+    p_raw = wt$p.value,
+    estimable = TRUE
+  )
 }
 
-# 3) Backward AIC by BLOCK (genes only)
-keep <- names(blocks)
-m_step <- fit_from_blocks(keep)
-aic_step <- AIC(m_step)
+onset_datasets <- list(
+  BD = BD,
+  SCZ = SCZ
+)
 
-repeat {
-  if (length(keep) == 0) break
-  
-  tried <- lapply(keep, function(b) {
-    keep2 <- setdiff(keep, b)
-    fit2 <- fit_from_blocks(keep2)
-    data.frame(drop_block = b, AIC = AIC(fit2), stringsAsFactors = FALSE)
-  }) |> bind_rows()
-  
-  best <- tried[which.min(tried$AIC), ]
-  if (best$AIC + 1e-10 < aic_step) {
-    keep <- setdiff(keep, best$drop_block)
-    m_step <- fit_from_blocks(keep)
-    aic_step <- best$AIC
-  } else {
-    break
+onset_genes <- tibble::tribble(
+  ~predictor, ~group_col,
+  "HTT",      "HTT_CODE",
+  "ATXN1",    "ATXN1_CODE",
+  "ATXN2",    "ATXN2_CODE"
+)
+
+onset_ia_plan <- tidyr::crossing(
+  cohort_scope = names(onset_datasets),
+  onset_genes
+) %>%
+  dplyr::mutate(
+    positive = "IA",
+    reference = "NORMAL",
+    family_id = "ONSET_IA_EXPLORATORY",
+    adjustment_method = "BH",
+    test_id = paste(
+      "ONSET", predictor, cohort_scope, positive, "vs", reference,
+      sep = "__"
+    )
+  )
+
+readr::write_csv(
+  onset_ia_plan,
+  file.path(revision_dir, "06_onset_IA_testing_plan.csv")
+)
+
+onset_ia_results_raw <- purrr::pmap_dfr(
+  onset_ia_plan,
+  function(cohort_scope,
+           predictor,
+           group_col,
+           positive,
+           reference,
+           family_id,
+           adjustment_method,
+           test_id) {
+
+    out <- run_onset_binary(
+      data = onset_datasets[[cohort_scope]],
+      group_col = group_col,
+      positive = positive,
+      reference = reference,
+      predictor = predictor,
+      cohort_scope = cohort_scope,
+      family_id = family_id,
+      adjustment_method = adjustment_method
+    )
+
+    dplyr::mutate(out, test_id = test_id, .before = 1)
   }
-}
+)
 
+onset_ia_results <- onset_ia_results_raw %>%
+  dplyr::mutate(
+    p_adj = stats::p.adjust(p_raw, method = "BH"),
+    significant_raw = !is.na(p_raw) & p_raw < 0.05,
+    significant_adjusted = !is.na(p_adj) & p_adj < 0.05
+  ) %>%
+  dplyr::arrange(p_adj, p_raw)
 
-# 4) Null / Full for comparison
-m_null <- coxph(as.formula(paste0("surv_object ~ ", paste(covars, collapse = " + "))), data = SCZ_cox)
+readr::write_csv(
+  onset_ia_results,
+  file.path(revision_dir, "06_onset_IA_master_results.csv")
+)
 
-m_full <- fit_from_blocks(names(blocks))
+# ------------------------------------------------------------------------------
+# 1B. Continuous CAG age-at-onset models: global gene-block inference
+# ------------------------------------------------------------------------------
 
-# 5) Output + comparisons
-
-cat("\nAIC (null):\n"); print(AIC(m_null))
-cat("\nAIC (full):\n"); print(AIC(m_full))
-cat("\nAIC (step-selected, blockwise):\n"); print(AIC(m_step))
-
-cat("\nGenetic blocks retained after step:\n")
-print(keep)
-
-cat("\nFinal model summary:\n")
-print(summary(m_step))
-
-cat("\nModel comparisons (LRT):\n")
-cat("\n- null vs full:\n"); print(anova(m_null, m_full, test = "LRT"))
-cat("\n- null vs step:\n"); print(anova(m_null, m_step, test = "LRT"))
-cat("\n- step vs full:\n"); print(anova(m_step, m_full, test = "LRT"))
-
-#DURATION COX MODELS
-
-surv_object <- Surv(time = BD$DURATION, event = rep(1, length(BD$DURATION)))
-cox_model <- coxph(surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE, data = BD)
-summary(cox_model)
-
-survdiff(surv_object ~ COFFEE, data = BD, rho = 0)
-survdiff(surv_object ~ APOE_E4, data = BD, rho = 0)
-survdiff(surv_object ~ SEX, data = BD, rho = 0)
-survdiff(surv_object ~ SMOKER, data = BD, rho = 0)
-survdiff(surv_object ~ ATXN2_CODE, data = BD, rho = 0)
-cox_model <- coxph(surv_object ~ ATXN2_CODE, data = BD)
-summary(cox_model)
-survdiff(surv_object ~ HTT_CODE, data = BD, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = BD, rho = 0)
-
-surv_object <- Surv(time = BD_NOCD$DURATION, event = rep(1, length(BD_NOCD$DURATION)))
-survdiff(surv_object ~ APOE_E4, data = BD_NOCD, rho = 0)
-survdiff(surv_object ~ ATXN2_CODE, data = BD_NOCD, rho = 0)
-survdiff(surv_object ~ HTT_CODE, data = BD_NOCD, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = BD_NOCD, rho = 0)
-
-surv_object <- Surv(time = BD_CD$DURATION, event = rep(1, length(BD_CD$DURATION)))
-cox_model <- coxph(surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE, data = BD_CD)
-summary(cox_model)
-survdiff(surv_object ~ ATXN2_CODE, data = BD_CD, rho = 0)
-cox_model <- coxph(surv_object ~ ATXN2_CODE, data = BD_CD)
-summary(cox_model)
-survdiff(surv_object ~ APOE_E4, data = BD_CD, rho = 0)
-survdiff(surv_object ~ HTT_CODE, data = BD_CD, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = BD_CD, rho = 0)
-
-# SCZ
-surv_object <- Surv(time = SCZ$DURATION, event = rep(1, length(SCZ$DURATION)))
-cox_model <- coxph(surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE, data = SCZ)
-summary(cox_model)
-survdiff(surv_object ~ APOE_E4, data = SCZ, rho = 0)
-survdiff(surv_object ~ SEX, data = SCZ, rho = 0)
-survdiff(surv_object ~ SMOKER, data = SCZ, rho = 0)
-survdiff(surv_object ~ ATXN2_CODE, data = SCZ, rho = 0)
-survdiff(surv_object ~ HTT_CODE, data = SCZ, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = SCZ, rho = 0)
-
-surv_object <- Surv(time = SCZ_NOCD$DURATION, event = rep(1, length(SCZ_NOCD$DURATION)))
-survdiff(surv_object ~ APOE_E4, data = SCZ_NOCD, rho = 0)
-survdiff(surv_object ~ HTT_CODE, data = SCZ_NOCD, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = SCZ_NOCD, rho = 0)
-
-surv_object <- Surv(time = SCZ_CD$DURATION, event = rep(1, length(SCZ_CD$DURATION)))
-survdiff(surv_object ~ APOE_E4, data = SCZ_CD, rho = 0)
-survdiff(surv_object ~ ATXN2_CODE, data = SCZ_CD, rho = 0)
-survdiff(surv_object ~ HTT_CODE, data = SCZ_CD, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = SCZ_CD, rho = 0)
-
-# SCZ COX MODEL----
-# 1) Data + Surv
-SCZ_cox <- SCZ %>%
-  select(all_of(vars_needed)) %>%
-  filter(if_all(everything(), ~ !is.na(.))) %>%
-  mutate(
-    SEX = factor(SEX),
-    SMOKER = factor(SMOKER),
-    COFFEE = factor(COFFEE),
-    APOE_E4 = factor(APOE_E4)
+onset_cag_plan <- tibble::tribble(
+  ~cohort_scope, ~gene,   ~short_var,       ~long_var,        ~code_var,
+  "BD",          "HTT",   "ALLELE1_HTT",    "ALLELE2_HTT",    "HTT_CODE",
+  "BD",          "ATXN1", "ALLELE1_ATXN1",  "ALLELE2_ATXN1",  "ATXN1_CODE",
+  "BD",          "ATXN2", "ALLELE1_ATXN2",  "ALLELE2_ATXN2",  "ATXN2_CODE",
+  "SCZ",         "HTT",   "ALLELE1_HTT",    "ALLELE2_HTT",    "HTT_CODE",
+  "SCZ",         "ATXN1", "ALLELE1_ATXN1",  "ALLELE2_ATXN1",  "ATXN1_CODE",
+  "SCZ",         "ATXN2", "ALLELE1_ATXN2",  "ALLELE2_ATXN2",  "ATXN2_CODE"
+) %>%
+  dplyr::mutate(
+    family_id = "ONSET_CAG_GLOBAL_EXPLORATORY",
+    adjustment_method = "BH",
+    test_id = paste("ONSET_CAG_BLOCK", gene, cohort_scope, sep = "__")
   )
 
-surv_object <- Surv(time = SCZ_cox$DURATION, event = rep(1, nrow(SCZ_cox)))
+readr::write_csv(
+  onset_cag_plan,
+  file.path(revision_dir, "06_onset_CAG_global_testing_plan.csv")
+)
 
-# Full and null for comparison
-block_terms <- function(short, long) {
+fit_onset_gene_block <- function(data,
+                                 cohort_scope,
+                                 gene,
+                                 short_var,
+                                 long_var,
+                                 code_var,
+                                 test_id) {
+
+  covars <- c("SEX", "COFFEE", "SMOKER", "APOE_E4")
+  needed <- c(
+    "ONSET_AGE", covars,
+    short_var, long_var, code_var
+  )
+
+  missing_cols <- setdiff(needed, names(data))
+  if (length(missing_cols) > 0) {
+    stop(
+      "Missing column(s) for ", test_id, ": ",
+      paste(missing_cols, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  d <- data %>%
+    dplyr::filter(as.character(.data[[code_var]]) != "EXPANDED") %>%
+    dplyr::select(dplyr::all_of(needed)) %>%
+    dplyr::filter(dplyr::if_all(dplyr::everything(), ~ !is.na(.))) %>%
+    dplyr::mutate(
+      SEX = droplevels(factor(SEX)),
+      COFFEE = droplevels(factor(COFFEE)),
+      SMOKER = droplevels(factor(SMOKER)),
+      APOE_E4 = droplevels(factor(APOE_E4))
+    )
+
+  if (nrow(d) < 20L) {
+    stop("Too few complete cases for ", test_id, ".", call. = FALSE)
+  }
+
+  # Center alleles before polynomial expansion for numerical stability.
+  d$short_c <- as.numeric(d[[short_var]]) - stats::median(as.numeric(d[[short_var]]))
+  d$long_c <- as.numeric(d[[long_var]]) - stats::median(as.numeric(d[[long_var]]))
+
+  m_null <- stats::lm(
+    ONSET_AGE ~ SEX + COFFEE + SMOKER + APOE_E4,
+    data = d
+  )
+
+  m_full <- stats::lm(
+    ONSET_AGE ~ SEX + COFFEE + SMOKER + APOE_E4 +
+      short_c + I(short_c^2) +
+      long_c + I(long_c^2) +
+      short_c:long_c,
+    data = d
+  )
+
+  an <- stats::anova(m_null, m_full)
+
+  global <- tibble::tibble(
+    test_id = test_id,
+    family_id = "ONSET_CAG_GLOBAL_EXPLORATORY",
+    adjustment_method = "BH",
+    cohort_scope = cohort_scope,
+    gene = gene,
+    n = stats::nobs(m_full),
+    df_added = unname(an$Df[2]),
+    f_statistic = unname(an$F[2]),
+    p_raw = unname(an$`Pr(>F)`[2]),
+    AIC_null = stats::AIC(m_null),
+    AIC_full = stats::AIC(m_full),
+    delta_AIC_full_minus_null = stats::AIC(m_full) - stats::AIC(m_null),
+    adjusted_r2_null = summary(m_null)$adj.r.squared,
+    adjusted_r2_full = summary(m_full)$adj.r.squared,
+    rank_deficient = m_full$rank < length(stats::coef(m_full))
+  )
+
+  coefficients <- broom::tidy(m_full, conf.int = TRUE) %>%
+    dplyr::mutate(
+      test_id = test_id,
+      cohort_scope = cohort_scope,
+      gene = gene,
+      .before = 1
+    )
+
   list(
-    s   = short,
-    s2  = paste0("I(", short, "^2)"),
-    l   = long,
-    l2  = paste0("I(", long, "^2)"),
-    int = paste0(short, ":", long)
+    global = global,
+    coefficients = coefficients
   )
 }
 
-blocks <- list(
-  HTT   = block_terms("ALLELE1_HTT",   "ALLELE2_HTT"),
-  ATXN1 = block_terms("ALLELE1_ATXN1", "ALLELE2_ATXN1"),
-  ATXN2 = block_terms("ALLELE1_ATXN2", "ALLELE2_ATXN2")
+onset_cag_fits <- purrr::pmap(
+  onset_cag_plan,
+  function(cohort_scope,
+           gene,
+           short_var,
+           long_var,
+           code_var,
+           family_id,
+           adjustment_method,
+           test_id) {
+
+    fit_onset_gene_block(
+      data = onset_datasets[[cohort_scope]],
+      cohort_scope = cohort_scope,
+      gene = gene,
+      short_var = short_var,
+      long_var = long_var,
+      code_var = code_var,
+      test_id = test_id
+    )
+  }
 )
 
-gen_all <- unlist(lapply(blocks, unlist), use.names = FALSE)
-
-f_full <- as.formula(paste("surv_object ~", paste(c(covars, gen_all), collapse = " + ")))
-m_full <- coxph(f_full, data = SCZ_cox)
-
-m_null <- coxph(
-  as.formula(paste("surv_object ~", paste(covars, collapse = " + "))),
-  data = SCZ_cox
-)
-
-# 6) Output
-cat("\nAIC (null):\n"); print(AIC(m_null))
-cat("\nAIC (full):\n"); print(AIC(m_full))
-cat("\nAIC (step-selected):\n"); print(AIC(m_step))
-
-cat("\nGenetic terms retained after step:\n")
-print(setdiff(attr(terms(m_step), "term.labels"), covars))
-
-cat("\nFinal model summary:\n")
-print(summary(m_step))
-
-#DURATION COX MODELS
-
-surv_object <- Surv(time = SCZ$DURATION, event = rep(1, length(SCZ$DURATION)))
-cox_model <- coxph(surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE, data = SCZ)
-summary(cox_model)
-
-survdiff(surv_object ~ COFFEE, data = SCZ, rho = 0)
-survdiff(surv_object ~ APOE_E4, data = SCZ, rho = 0)
-survdiff(surv_object ~ SEX, data = SCZ, rho = 0)
-survdiff(surv_object ~ SMOKER, data = SCZ, rho = 0)
-survdiff(surv_object ~ ATXN2_CODE, data = SCZ, rho = 0)
-cox_model <- coxph(surv_object ~ ATXN2_CODE, data = SCZ)
-summary(cox_model)
-survdiff(surv_object ~ HTT_CODE, data = SCZ, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = SCZ, rho = 0)
-
-surv_object <- Surv(time = SCZ_NOCD$DURATION, event = rep(1, length(SCZ_NOCD$DURATION)))
-survdiff(surv_object ~ APOE_E4, data = SCZ_NOCD, rho = 0)
-survdiff(surv_object ~ ATXN2_CODE, data = SCZ_NOCD, rho = 0)
-survdiff(surv_object ~ HTT_CODE, data = SCZ_NOCD, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = SCZ_NOCD, rho = 0)
-
-surv_object <- Surv(time = SCZ_CD$DURATION, event = rep(1, length(SCZ_CD$DURATION)))
-cox_model <- coxph(surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE, data = SCZ_CD)
-summary(cox_model)
-survdiff(surv_object ~ ATXN2_CODE, data = SCZ_CD, rho = 0)
-cox_model <- coxph(surv_object ~ ATXN2_CODE, data = SCZ_CD)
-summary(cox_model)
-survdiff(surv_object ~ APOE_E4, data = SCZ_CD, rho = 0)
-survdiff(surv_object ~ HTT_CODE, data = SCZ_CD, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = SCZ_CD, rho = 0)
-
-# SCZ
-surv_object <- Surv(time = SCZ$DURATION, event = rep(1, length(SCZ$DURATION)))
-cox_model <- coxph(surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE, data = SCZ)
-summary(cox_model)
-survdiff(surv_object ~ APOE_E4, data = SCZ, rho = 0)
-survdiff(surv_object ~ SEX, data = SCZ, rho = 0)
-survdiff(surv_object ~ SMOKER, data = SCZ, rho = 0)
-survdiff(surv_object ~ ATXN2_CODE, data = SCZ, rho = 0)
-survdiff(surv_object ~ HTT_CODE, data = SCZ, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = SCZ, rho = 0)
-
-surv_object <- Surv(time = SCZ_NOCD$DURATION, event = rep(1, length(SCZ_NOCD$DURATION)))
-survdiff(surv_object ~ APOE_E4, data = SCZ_NOCD, rho = 0)
-survdiff(surv_object ~ HTT_CODE, data = SCZ_NOCD, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = SCZ_NOCD, rho = 0)
-
-surv_object <- Surv(time = SCZ_CD$DURATION, event = rep(1, length(SCZ_CD$DURATION)))
-survdiff(surv_object ~ APOE_E4, data = SCZ_CD, rho = 0)
-survdiff(surv_object ~ ATXN2_CODE, data = SCZ_CD, rho = 0)
-survdiff(surv_object ~ HTT_CODE, data = SCZ_CD, rho = 0)
-survdiff(surv_object ~ ATXN1_CODE, data = SCZ_CD, rho = 0)
-
-# Sup. Fig. 2C: Forest plot from Cox model (BD) -----
-# 1) Prepare BD dataset
-BD_cox <- BD %>%
-  filter(
-    !is.na(DURATION),
-    !is.na(SEX),
-    !is.na(SMOKER),
-    !is.na(COFFEE),
-    !is.na(ATXN2_CODE),
-    !is.na(HTT_CODE),
-    !is.na(ATXN1_CODE),
-    ATXN2_CODE != "EXPANDED",
-    HTT_CODE  != "EXPANDED"
+onset_cag_global <- purrr::map_dfr(onset_cag_fits, "global") %>%
+  dplyr::mutate(
+    p_adj = stats::p.adjust(p_raw, method = "BH"),
+    significant_raw = p_raw < 0.05,
+    significant_adjusted = p_adj < 0.05
   ) %>%
-  mutate(
-    SEX       = droplevels(factor(SEX)),
-    SMOKER    = droplevels(factor(SMOKER)),
-    HTT_CODE  = droplevels(factor(HTT_CODE)),
-    ATXN1_CODE = droplevels(factor(ATXN1_CODE)),
-    ATXN2_CODE = droplevels(factor(ATXN2_CODE))
+  dplyr::arrange(p_adj, p_raw)
+
+onset_cag_coefficients <- purrr::map_dfr(onset_cag_fits, "coefficients") %>%
+  dplyr::left_join(
+    onset_cag_global %>%
+      dplyr::select(test_id, global_block_p = p_raw, global_block_p_adj = p_adj),
+    by = "test_id"
   )
 
-# 2) Survival object
-surv_object <- Surv(time = BD_cox$DURATION, event = rep(1, nrow(BD_cox)))
-
-# 3) Cox model
-cox_model <- coxph(
-  surv_object ~ SEX + SMOKER + COFFEE + APOE_E4 + ATXN2_CODE + HTT_CODE + ATXN1_CODE,
-  data = BD_cox
+readr::write_csv(
+  onset_cag_global,
+  file.path(revision_dir, "06_onset_CAG_global_results.csv")
 )
 
-# 4) Tidy results
-tt <- broom::tidy(cox_model, exponentiate = TRUE, conf.int = TRUE) %>%
-  filter(term != "(Intercept)")
+readr::write_csv(
+  onset_cag_coefficients,
+  file.path(revision_dir, "06_onset_CAG_coefficients.csv")
+)
 
-# 5) Forest plot data
-x_min <- 0.25
-x_max <- 4.5
+# ------------------------------------------------------------------------------
+# Reviewer-facing outputs
+# ------------------------------------------------------------------------------
 
-col_nsig <- "#8CBDE6"  # blue
-col_sig  <- "#d62728"  # red
+cat("\n============================================================\n")
+cat("AGE AT ONSET: IA TESTS SIGNIFICANT AFTER BH-FDR\n")
+cat("============================================================\n")
 
-df_fp <- tt %>%
-  mutate(
-    term = stringr::str_trim(term),  # por si hay espacios raros
-    term_label = case_when(
-      term == "SEX[T.Female]"          ~ "Female sex",
-      term == "SMOKER[T.Non-smoking]"  ~ "Non-smoking",
-      term == "COFFEE[T.Coffee]"       ~ "Coffee consumption",
-      term == "HTT_CODE[T.IA]"         ~ "italic(HTT)~' IA'",
-      term == "ATXN1_CODE[T.IA]"        ~ "italic(ATXN1)~' IA'",
-      term == "ATXN2_CODE[T.IA]"        ~ "italic(ATXN2)~' IA'",
-      TRUE ~ NA_character_
+print(
+  onset_ia_results %>%
+    dplyr::filter(significant_adjusted) %>%
+    dplyr::select(
+      test_id, predictor, cohort_scope,
+      n_positive, n_reference,
+      median_positive, median_reference,
+      median_difference, rank_biserial,
+      p_raw, p_adj
     ),
-    sig05 = ifelse(p.value < 0.05, "Significant (p < 0.05)", "Not significant"),
-    sig05 = factor(sig05, levels = c("Significant (p < 0.05)", "Not significant")),
-    sig = -log10(pmax(p.value, 1e-300)),
-    est_p = pmin(pmax(estimate,  x_min), x_max),
-    lo_p  = pmin(pmax(conf.low,  x_min), x_max),
-    hi_p  = pmin(pmax(conf.high, x_min), x_max),
-    cut_left  = conf.low  < x_min,
-    cut_right = conf.high > x_max
-  ) %>%
-  filter(!is.na(term_label))
-
-order_terms <- c(
-  "Female sex",
-  "Non-smoking",
-  "Coffee consumption",
-  "italic(HTT)~' IA'",
-  "italic(ATXN1)~' IA'",
-  "italic(ATXN2)~' IA'"
+  n = Inf,
+  width = Inf
 )
 
-df_fp <- df_fp %>%
-  mutate(term_label = factor(term_label, levels = rev(order_terms)))
+cat("\n============================================================\n")
+cat("AGE AT ONSET: GLOBAL CAG GENE-BLOCK TESTS\n")
+cat("============================================================\n")
 
-# 6) Forest plot
-g_forest_D <- ggplot(df_fp, aes(x = est_p, y = term_label)) +
-  coord_cartesian(xlim = c(x_min, x_max), clip = "off") +
-  geom_vline(xintercept = 1, linetype = "dashed", linewidth = 0.6, color = "grey45") +
-  
-  geom_errorbarh(
-    aes(xmin = lo_p, xmax = hi_p, color = sig05),
-    height = 0.18, linewidth = 0.9
-  ) +
-  geom_point(
-    aes(size = sig, fill = sig05),
-    shape = 21, color = "black", stroke = 0.35
-  ) +
-  
-  geom_segment(
-    data = df_fp %>% filter(cut_left),
-    aes(x = x_min * 1.35, xend = x_min * 1.08,
-        y = term_label, yend = term_label, color = sig05),
-    inherit.aes = FALSE,
-    arrow = arrow(type = "closed", length = unit(0.16, "cm")),
-    linewidth = 0.9
-  ) +
-  geom_segment(
-    data = df_fp %>% filter(cut_right),
-    aes(x = x_max / 1.35, xend = x_max / 1.08,
-        y = term_label, yend = term_label, color = sig05),
-    inherit.aes = FALSE,
-    arrow = arrow(type = "closed", length = unit(0.16, "cm")),
-    linewidth = 0.9
-  ) +
-  
-  scale_x_log10(name = "Hazard ratio (log scale)") +
-  scale_color_manual(
-    name = "Statistical significance",
-    values = c(
-      "Significant (p < 0.05)" = col_sig,
-      "Not significant"        = col_nsig
-    )
-  ) +
-  scale_fill_manual(
-    name = "Statistical significance",
-    values = c(
-      "Significant (p < 0.05)" = col_sig,
-      "Not significant"        = col_nsig
-    )
-  ) +
-  scale_size_continuous(
-    name = expression(-log[10](p)),
-    range = c(2.6, 6.8)
-  ) +
-  theme_classic(base_size = 12) +
-  theme(
-    legend.position = "top",
-    legend.box = "vertical",
-    axis.title.y = element_blank(),
-    plot.margin = margin(8, 16, 8, 8)
-  ) +
-  scale_y_discrete(labels = function(x) {
-    out <- x
-    is_math <- grepl("^italic\\(", x)
-    out[is_math] <- sapply(x[is_math], function(z) as.expression(parse(text = z)))
-    out
-  })
-
-g_forest_D
-
-# 7) Save
-ggsave(
-  filename = file.path(fig_dir, "Sup_Fig_2C.tiff"),
-  plot = g_forest_D,
-  device = "tiff",
-  width = 250, height = 160, units = "mm",
-  dpi = 600, compression = "lzw"
+print(
+  onset_cag_global %>%
+    dplyr::select(
+      test_id, gene, cohort_scope, n,
+      f_statistic, p_raw, p_adj,
+      delta_AIC_full_minus_null,
+      adjusted_r2_null, adjusted_r2_full,
+      rank_deficient
+    ),
+  n = Inf,
+  width = Inf
 )
 
-# Sup. Fig. 2D: K-M BD ATXN2 -----
-surv_object <- Surv(time = BD$DURATION, event = rep(1, length(BD$DURATION)))
-gen.km <- survfit(surv_object ~ ATXN2_CODE, data = BD, type = "kaplan-meier", error = "tsiatis", conf.type = "log-log", conf.int = 0.95)
-bd_palette <- c("#F4A6A6", "#C73A3A")
+cat("\n============================================================\n")
+cat("AGE AT ONSET: GLOBAL CAG BLOCKS SIGNIFICANT AFTER BH-FDR\n")
+cat("============================================================\n")
 
-plot_km <- ggsurvplot(
-  fit = gen.km,
-  data = BD,
-  conf.int = TRUE,
-  pval = TRUE,
-  risk.table = TRUE,
-  palette = bd_palette,
-  xlab = "Disease duration (years)",
-  ylab = "Event-free probability",
-  legend.labs = c("Normal", "IA"),
-  surv.median.line = "none",
-  risk.table.height = 0.25
+print(
+  onset_cag_global %>%
+    dplyr::filter(significant_adjusted) %>%
+    dplyr::select(
+      test_id, gene, cohort_scope, n,
+      f_statistic, p_raw, p_adj,
+      delta_AIC_full_minus_null
+    ),
+  n = Inf,
+  width = Inf
 )
 
-leg_title <- expression(italic("ATXN2") * " genotype")
 
-plot_km$plot <- plot_km$plot +
-  scale_color_manual(
-    values = bd_palette,
-    labels = c("Normal", "IA"),
-    name = leg_title
-  ) +
-  scale_fill_manual(
-    values = bd_palette,
-    labels = c("Normal", "IA"),
-    name = leg_title
-  )
+# 3. CROSS-SECTIONAL DISEASE-DURATION ANALYSIS ================================
+#
+# Reviewer-driven revision:
+#   DURATION is the observed interval from age at onset to the last clinical
+#   assessment. There is no clinical event and no censoring variable.
+#
+# Therefore:
+#   - no survival objects are created;
+#   - no Cox proportional-hazards models are fitted;
+#   - no log-rank tests are performed;
+#   - no Kaplan-Meier curves are generated;
+#   - no hazard ratios are reported.
+#
+# DURATION is retained only as a cross-sectional, exploratory clinical variable.
+# All STR duration comparisons below are IA vs NORMAL and exclude EXPANDED
+# carriers from inferential testing. The expanded cases remain described
+# individually elsewhere in the study.
+#
+# Multiple testing:
+#   STR duration comparisons form one prespecified exploratory family and use
+#   Benjamini-Hochberg FDR adjustment across the full family.
+#   APOE duration comparisons are kept in a separate exploratory family.
 
-plot_km$table <- plot_km$table +
-  labs(y = leg_title)
-
-print(plot_km)
-
-tiff(
-  filename = file.path(fig_dir, "Sup_Fig_2D.tiff"),
-  width = 250, height = 160, units = "mm",
-  res = 600, compression = "lzw"
-)
-print(plot_km)
-dev.off()
-
-# Sup. Fig. 2E: K-M BD-CD ATXN2 -----
-surv_object <- Surv(time = BD_CD$DURATION, event = rep(1, length(BD_CD$DURATION)))
-gen.km <- survfit(surv_object ~ ATXN2_CODE, data = BD_CD, type = "kaplan-meier", error = "tsiatis", conf.type = "log-log", conf.int = 0.95)
-bd_palette <- c("#D65C5C", "#7A1F1F")
-
-plot_km_CD <- ggsurvplot(
-  fit = gen.km,
-  data = BD_CD,
-  conf.int = TRUE,
-  pval = TRUE,
-  risk.table = TRUE,
-  palette = bd_palette,
-  xlab = "Disease duration (years)",
-  ylab = "Event-free probability",
-  legend.labs = c("Normal", "IA"),
-  surv.median.line = "none",
-  risk.table.height = 0.25
-)
-
-leg_title <- expression(italic("ATXN2") * " genotype")
-
-plot_km_CD$plot <- plot_km_CD$plot +
-  scale_color_manual(
-    values = bd_palette,
-    labels = c("Normal", "IA"),
-    name = leg_title
-  ) +
-  scale_fill_manual(
-    values = bd_palette,
-    labels = c("Normal", "IA"),
-    name = leg_title
-  )
-
-plot_km_CD$table <- plot_km_CD$table +
-  labs(y = leg_title)
-
-print(plot_km_CD)
-
-tiff(
-  filename = file.path(fig_dir, "Sup_Fig_2E.tiff"),
-  width = 250, height = 160, units = "mm",
-  res = 600, compression = "lzw"
-)
-print(plot_km_CD)
-dev.off()
-
-# Build composite figure ----
-
-# KM + risk table as ONE patchwork object
-km_as_one_panel <- function(km_obj, curve_h = 3.0, table_h = 1.2) {
-  
-  km_comp <- km_obj$plot / km_obj$table +
-    plot_layout(heights = c(curve_h, table_h))
-  
-  wrap_elements(full = km_comp)
+revision_dir <- file.path("results", "reviewer_revision")
+if (!dir.exists(revision_dir)) {
+  dir.create(revision_dir, recursive = TRUE)
 }
 
-# D (left) and E (right), in that order
-km_D <- km_as_one_panel(plot_km,    curve_h = 3.0, table_h = 1.2)
-km_E <- km_as_one_panel(plot_km_CD, curve_h = 3.0, table_h = 1.2)
+# ------------------------------------------------------------------------------
+# Generic two-group duration comparison
+# ------------------------------------------------------------------------------
 
-Sup_Fig_2 <-
-  panel_A /
-  (p_atxn1 | g_forest_D) /
-  (km_D | km_E) +
-  plot_layout(heights = c(1.15, 1.25, 1.75)) +
-  plot_annotation(tag_levels = "A") &
-  theme(
-    plot.tag = element_text(face = "bold", size = 24),
-    plot.tag.position = c(0, 1),
-    plot.tag.padding = unit(4, "pt")
+run_duration_binary <- function(data,
+                                group_col,
+                                positive,
+                                reference,
+                                predictor,
+                                cohort_scope,
+                                family_id,
+                                adjustment_method = "BH") {
+
+  needed <- c("DURATION", group_col)
+  missing_cols <- setdiff(needed, names(data))
+  if (length(missing_cols) > 0) {
+    stop(
+      "Missing column(s) in ", cohort_scope, ": ",
+      paste(missing_cols, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  d <- data %>%
+    dplyr::transmute(
+      duration = as.numeric(DURATION),
+      group = as.character(.data[[group_col]])
+    ) %>%
+    dplyr::filter(
+      !is.na(duration),
+      is.finite(duration),
+      group %in% c(reference, positive)
+    )
+
+  x_ref <- d$duration[d$group == reference]
+  x_pos <- d$duration[d$group == positive]
+
+  n_ref <- length(x_ref)
+  n_pos <- length(x_pos)
+
+  if (n_ref < 2L || n_pos < 2L) {
+    return(
+      tibble::tibble(
+        family_id = family_id,
+        adjustment_method = adjustment_method,
+        cohort_scope = cohort_scope,
+        predictor = predictor,
+        group_variable = group_col,
+        positive = positive,
+        reference = reference,
+        contrast = paste0(positive, " vs ", reference),
+        n_positive = n_pos,
+        n_reference = n_ref,
+        n_total = n_pos + n_ref,
+        mean_positive = if (n_pos > 0) mean(x_pos) else NA_real_,
+        sd_positive = if (n_pos > 1) stats::sd(x_pos) else NA_real_,
+        median_positive = if (n_pos > 0) stats::median(x_pos) else NA_real_,
+        iqr_positive = if (n_pos > 0) stats::IQR(x_pos) else NA_real_,
+        mean_reference = if (n_ref > 0) mean(x_ref) else NA_real_,
+        sd_reference = if (n_ref > 1) stats::sd(x_ref) else NA_real_,
+        median_reference = if (n_ref > 0) stats::median(x_ref) else NA_real_,
+        iqr_reference = if (n_ref > 0) stats::IQR(x_ref) else NA_real_,
+        median_difference = if (n_pos > 0 && n_ref > 0) {
+          stats::median(x_pos) - stats::median(x_ref)
+        } else {
+          NA_real_
+        },
+        rank_biserial = NA_real_,
+        p_raw = NA_real_,
+        estimable = FALSE
+      )
+    )
+  }
+
+  wt <- stats::wilcox.test(
+    x = x_pos,
+    y = x_ref,
+    alternative = "two.sided",
+    exact = FALSE,
+    correct = FALSE
   )
 
-Sup_Fig_2
+  # Rank-biserial effect with explicit direction:
+  # positive values = longer observed duration in POSITIVE vs REFERENCE.
+  pair_diff <- outer(x_pos, x_ref, FUN = "-")
+  r_rb <- (
+    sum(pair_diff > 0, na.rm = TRUE) -
+      sum(pair_diff < 0, na.rm = TRUE)
+  ) / (n_pos * n_ref)
+
+  tibble::tibble(
+    family_id = family_id,
+    adjustment_method = adjustment_method,
+    cohort_scope = cohort_scope,
+    predictor = predictor,
+    group_variable = group_col,
+    positive = positive,
+    reference = reference,
+    contrast = paste0(positive, " vs ", reference),
+    n_positive = n_pos,
+    n_reference = n_ref,
+    n_total = n_pos + n_ref,
+    mean_positive = mean(x_pos),
+    sd_positive = stats::sd(x_pos),
+    median_positive = stats::median(x_pos),
+    iqr_positive = stats::IQR(x_pos),
+    mean_reference = mean(x_ref),
+    sd_reference = stats::sd(x_ref),
+    median_reference = stats::median(x_ref),
+    iqr_reference = stats::IQR(x_ref),
+    median_difference = stats::median(x_pos) - stats::median(x_ref),
+    rank_biserial = r_rb,
+    p_raw = wt$p.value,
+    estimable = TRUE
+  )
+}
+
+# ------------------------------------------------------------------------------
+# STR duration family: IA vs NORMAL
+# ------------------------------------------------------------------------------
+
+duration_datasets <- list(
+  BD_ALL = BD,
+  BD_I = BD_I,
+  BD_CD = BD_CD,
+  BD_NOCD = BD_NOCD,
+  SCZ_ALL = SCZ,
+  SCZ_MAIN_SUBTYPE = SCZ_P,
+  SCZ_CD = SCZ_CD,
+  SCZ_NOCD = SCZ_NOCD
+)
+
+duration_genes <- tibble::tribble(
+  ~predictor, ~group_col,
+  "HTT",      "HTT_CODE",
+  "ATXN1",    "ATXN1_CODE",
+  "ATXN2",    "ATXN2_CODE"
+)
+
+duration_str_plan <- tidyr::crossing(
+  cohort_scope = names(duration_datasets),
+  duration_genes
+) %>%
+  dplyr::mutate(
+    positive = "IA",
+    reference = "NORMAL",
+    family_id = "DURATION_STR_EXPLORATORY",
+    adjustment_method = "BH",
+    test_id = paste(
+      "DURATION", predictor, cohort_scope, positive, "vs", reference,
+      sep = "__"
+    )
+  )
+
+readr::write_csv(
+  duration_str_plan,
+  file.path(revision_dir, "06_duration_STR_testing_plan.csv")
+)
+
+duration_str_results_raw <- purrr::pmap_dfr(
+  duration_str_plan,
+  function(cohort_scope,
+           predictor,
+           group_col,
+           positive,
+           reference,
+           family_id,
+           adjustment_method,
+           test_id) {
+
+    out <- run_duration_binary(
+      data = duration_datasets[[cohort_scope]],
+      group_col = group_col,
+      positive = positive,
+      reference = reference,
+      predictor = predictor,
+      cohort_scope = cohort_scope,
+      family_id = family_id,
+      adjustment_method = adjustment_method
+    )
+
+    dplyr::mutate(out, test_id = test_id, .before = 1)
+  }
+)
+
+duration_str_results <- duration_str_results_raw %>%
+  dplyr::mutate(
+    p_adj = stats::p.adjust(p_raw, method = "BH"),
+    significant_raw = !is.na(p_raw) & p_raw < 0.05,
+    significant_adjusted = !is.na(p_adj) & p_adj < 0.05,
+    interpretation = "Cross-sectional observed disease duration; not progression/time-to-event."
+  ) %>%
+  dplyr::arrange(p_adj, p_raw)
+
+readr::write_csv(
+  duration_str_results,
+  file.path(revision_dir, "06_duration_STR_master_results.csv")
+)
+
+# ------------------------------------------------------------------------------
+# APOE duration family: E4+ vs E4-
+# ------------------------------------------------------------------------------
+
+duration_apoe_datasets <- c(
+  duration_datasets,
+  list(BD_II = BD_II)
+)
+
+duration_apoe_plan <- tibble::tibble(
+  cohort_scope = names(duration_apoe_datasets),
+  predictor = "APOE_E4",
+  group_col = "APOE_E4",
+  positive = "E4+",
+  reference = "E4-",
+  family_id = "DURATION_APOE_EXPLORATORY",
+  adjustment_method = "BH"
+) %>%
+  dplyr::mutate(
+    test_id = paste(
+      "DURATION", predictor, cohort_scope, positive, "vs", reference,
+      sep = "__"
+    )
+  )
+
+readr::write_csv(
+  duration_apoe_plan,
+  file.path(revision_dir, "06_duration_APOE_testing_plan.csv")
+)
+
+duration_apoe_results_raw <- purrr::pmap_dfr(
+  duration_apoe_plan,
+  function(cohort_scope,
+           predictor,
+           group_col,
+           positive,
+           reference,
+           family_id,
+           adjustment_method,
+           test_id) {
+
+    out <- run_duration_binary(
+      data = duration_apoe_datasets[[cohort_scope]],
+      group_col = group_col,
+      positive = positive,
+      reference = reference,
+      predictor = predictor,
+      cohort_scope = cohort_scope,
+      family_id = family_id,
+      adjustment_method = adjustment_method
+    )
+
+    dplyr::mutate(out, test_id = test_id, .before = 1)
+  }
+)
+
+duration_apoe_results <- duration_apoe_results_raw %>%
+  dplyr::mutate(
+    p_adj = stats::p.adjust(p_raw, method = "BH"),
+    significant_raw = !is.na(p_raw) & p_raw < 0.05,
+    significant_adjusted = !is.na(p_adj) & p_adj < 0.05,
+    interpretation = "Cross-sectional observed disease duration; not progression/time-to-event."
+  ) %>%
+  dplyr::arrange(p_adj, p_raw)
+
+readr::write_csv(
+  duration_apoe_results,
+  file.path(revision_dir, "06_duration_APOE_master_results.csv")
+)
+
+# ------------------------------------------------------------------------------
+# Reviewer-facing outputs
+# ------------------------------------------------------------------------------
+
+cat("\n============================================================\n")
+cat("CROSS-SECTIONAL DURATION: ATXN2 IA IN BD\n")
+cat("No Cox / KM / log-rank interpretation is used.\n")
+cat("============================================================\n")
+
+print(
+  duration_str_results %>%
+    dplyr::filter(
+      predictor == "ATXN2",
+      cohort_scope == "BD_ALL"
+    ),
+  width = Inf
+)
+
+cat("\n============================================================\n")
+cat("STR DURATION TESTS SIGNIFICANT AFTER BH-FDR\n")
+cat("============================================================\n")
+
+print(
+  duration_str_results %>%
+    dplyr::filter(significant_adjusted) %>%
+    dplyr::select(
+      test_id, predictor, cohort_scope,
+      n_positive, n_reference,
+      median_positive, median_reference,
+      median_difference, rank_biserial,
+      p_raw, p_adj
+    ),
+  n = Inf,
+  width = Inf
+)
+
+cat("\n============================================================\n")
+cat("TEN SMALLEST RAW STR DURATION P-VALUES\n")
+cat("============================================================\n")
+
+print(
+  duration_str_results %>%
+    dplyr::select(
+      test_id, predictor, cohort_scope,
+      n_positive, n_reference,
+      median_positive, median_reference,
+      median_difference, rank_biserial,
+      p_raw, p_adj
+    ) %>%
+    dplyr::slice_head(n = 10),
+  n = Inf,
+  width = Inf
+)
+
+# ------------------------------------------------------------------------------
+# Revised Supplementary Figure 2 -----------------------------------------------
+# The former survival panels are removed. Until the reviewer-driven
+# age-at-onset global tests are inspected, only the descriptive onset-age /
+# observed-duration panel is retained here. No model-selected ATXN1 panel is
+# generated automatically.
+
+Sup_Fig_2 <- patchwork::wrap_elements(full = panel_A)
+
+print(Sup_Fig_2)
 
 ggsave(
   filename = file.path(fig_dir, "Supplementary Figure 2.tiff"),
   plot = Sup_Fig_2,
   device = "tiff",
-  width = 500, height = 650, units = "mm",
+  width = 400, height = 160, units = "mm",
   dpi = 600, compression = "lzw"
 )
 

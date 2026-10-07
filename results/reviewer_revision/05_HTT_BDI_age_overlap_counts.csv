@@ -1,0 +1,5 @@
+outcome,in_common_age_range,n
+CONTROL,FALSE,17
+CONTROL,TRUE,987
+BD-I,FALSE,26
+BD-I,TRUE,187

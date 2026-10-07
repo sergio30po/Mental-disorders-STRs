@@ -1,0 +1,14 @@
+07 Enrichr-KG network interpretation
+
+Status: exploratory / hypothesis-generating only.
+
+This network is based on gene-centered public knowledge annotations and
+first-degree relationships around HTT, ATXN1 and ATXN2.
+
+It does not use CAG repeat length, intermediate-allele status, STR-specific
+functional measurements, repeat-QTL data, or experimental validation of
+the repeat variants analyzed in this study.
+
+Accordingly, network proximity and shared annotations must not be described
+as evidence of a CAG-specific molecular mechanism, mediation, causality,
+or functional validation of the genetic association results.
