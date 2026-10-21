@@ -229,19 +229,50 @@ DT <- bind_rows(
   MENTAL |> select(-COFFEE, -CD, -PATHOLOGY_TYPE, -ONSET_AGE, -DURATION)
 )
 
-DT$PATHOLOGY <- as.factor(DT$PATHOLOGY)
+# Global diagnostic reference convention:
+#   - CONTROL is the reference whenever controls are included.
+#   - For the direct BD/SCZ comparison, BD is the reference.
+# Explicit factor levels prevent downstream results from depending on bind/order.
+DT$PATHOLOGY <- factor(
+  as.character(DT$PATHOLOGY),
+  levels = c("CONTROL", "BD", "SCZ")
+)
+MENTAL$PATHOLOGY <- factor(
+  as.character(MENTAL$PATHOLOGY),
+  levels = c("BD", "SCZ")
+)
 
 CONTROLS$BD_type <- "CONTROL"
 BD_CONTROLS <- bind_rows(
   BD |> select(-COFFEE, -CD, -ONSET_AGE, -DURATION, -PATHOLOGY_TYPE),
   CONTROLS
-)
+) |>
+  dplyr::mutate(
+    PATHOLOGY_TYPE_BINARY = factor(
+      as.character(PATHOLOGY_TYPE_BINARY),
+      levels = c("CONTROL", "BD-I", "Other")
+    ),
+    CD_BINARY = factor(
+      as.character(CD_BINARY),
+      levels = c("CONTROL", "No-CD", "CD")
+    )
+  )
 CONTROLS <- CONTROLS |> select(-BD_type)
 
 SCZ_CONTROLS <- bind_rows(
   SCZ |> select(-COFFEE,-CD, -ONSET_AGE, -DURATION, -PATHOLOGY_TYPE),
   CONTROLS
-)
+) |>
+  dplyr::mutate(
+    PATHOLOGY_TYPE_BINARY = factor(
+      as.character(PATHOLOGY_TYPE_BINARY),
+      levels = c("CONTROL", "SCZ", "Other")
+    ),
+    CD_BINARY = factor(
+      as.character(CD_BINARY),
+      levels = c("CONTROL", "No-CD", "CD")
+    )
+  )
 
 # Output section ----
 # Save processed datasets for downstream analyses
