@@ -84,6 +84,42 @@ run_oriented_wilcox <- function(data,
   u_cmp <- unname(wt$statistic)
   r_rb <- 2 * u_cmp / (n_cmp * n_ref) - 1
 
+  # Obtain a 95% CI from effectsize, then explicitly align its sign to the
+  # comparison/reference convention above. This keeps the CI independent of
+  # factor-level defaults used by external packages.
+  d_ci <- d |>
+    dplyr::mutate(
+      group = factor(group, levels = c(reference, comparison))
+    )
+
+  rb_ci_obj <- suppressMessages(
+    effectsize::rank_biserial(value ~ group, data = d_ci, ci = 0.95)
+  )
+  rb_ci_df <- as.data.frame(rb_ci_obj)
+
+  ci_low_col <- grep("^CI_low$|CI_low", names(rb_ci_df), value = TRUE)[1]
+  ci_high_col <- grep("^CI_high$|CI_high", names(rb_ci_df), value = TRUE)[1]
+  effect_col <- setdiff(
+    names(rb_ci_df)[vapply(rb_ci_df, is.numeric, logical(1))],
+    c("CI", ci_low_col, ci_high_col)
+  )[1]
+
+  rb_ci_low <- if (!is.na(ci_low_col)) rb_ci_df[[ci_low_col]][1] else NA_real_
+  rb_ci_high <- if (!is.na(ci_high_col)) rb_ci_df[[ci_high_col]][1] else NA_real_
+  rb_pkg <- if (!is.na(effect_col)) rb_ci_df[[effect_col]][1] else NA_real_
+
+  if (
+    !is.na(rb_pkg) &&
+    !is.na(rb_ci_low) &&
+    !is.na(rb_ci_high) &&
+    sign(rb_pkg) != sign(r_rb) &&
+    r_rb != 0
+  ) {
+    old_low <- rb_ci_low
+    rb_ci_low <- -rb_ci_high
+    rb_ci_high <- -old_low
+  }
+
   tibble::tibble(
     test_id = test_id,
     family_id = family_id,
@@ -103,6 +139,8 @@ run_oriented_wilcox <- function(data,
     mean_reference = mean(x_ref),
     sd_reference = stats::sd(x_ref),
     rank_biserial = r_rb,
+    conf_low = rb_ci_low,
+    conf_high = rb_ci_high,
     p_raw = wt$p.value
   )
 }
