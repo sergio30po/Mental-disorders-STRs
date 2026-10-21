@@ -70,6 +70,72 @@ read_revision <- function(filename) {
 }
 
 # ------------------------------------------------------------------------------
+# Diagnostic-reference audit
+# ------------------------------------------------------------------------------
+# Global convention:
+#   - CONTROL is always the reference whenever controls are included.
+#   - For the direct BD/SCZ comparison, BD is the reference and SCZ is the
+#     comparison group.
+#
+# Fail fast if an upstream reviewer-facing output violates this convention.
+
+validate_diagnostic_references <- function() {
+
+  ia <- read_revision("03_IA_frequency_master_results.csv") |>
+    dplyr::filter(analysis == "IA frequency: main diagnostic comparison")
+
+  bad_ia_control <- ia |>
+    dplyr::filter(
+      (case == "CONTROL" | reference == "CONTROL") &
+        reference != "CONTROL"
+    )
+
+  bad_ia_bd_scz <- ia |>
+    dplyr::filter(
+      case %in% c("BD", "SCZ"),
+      reference %in% c("BD", "SCZ"),
+      !(case == "SCZ" & reference == "BD")
+    )
+
+  cag <- read_revision("04_CAG_pairwise_master_results.csv") |>
+    dplyr::filter(family_id == "A1_CAG_DIAGNOSIS_PAIRWISE")
+
+  bad_cag_control <- cag |>
+    dplyr::filter(
+      (positive == "CONTROL" | reference == "CONTROL") &
+        reference != "CONTROL"
+    )
+
+  bad_cag_bd_scz <- cag |>
+    dplyr::filter(
+      positive %in% c("BD", "SCZ"),
+      reference %in% c("BD", "SCZ"),
+      !(positive == "SCZ" & reference == "BD")
+    )
+
+  if (
+    nrow(bad_ia_control) > 0L ||
+    nrow(bad_ia_bd_scz) > 0L ||
+    nrow(bad_cag_control) > 0L ||
+    nrow(bad_cag_bd_scz) > 0L
+  ) {
+    stop(
+      paste(
+        "Diagnostic reference audit failed.",
+        "Required convention: CONTROL reference whenever present;",
+        "BD reference for direct SCZ-vs-BD comparisons.",
+        "Rerun scripts 03 and 04 with the current testing plans."
+      ),
+      call. = FALSE
+    )
+  }
+
+  invisible(TRUE)
+}
+
+validate_diagnostic_references()
+
+# ------------------------------------------------------------------------------
 # Common schema
 # ------------------------------------------------------------------------------
 
