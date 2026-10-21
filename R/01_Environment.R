@@ -27,13 +27,36 @@ required_packages <- c(
   "survival", "survminer"
 )
 
+# Use a fixed CRAN mirror so package installation also works outside RStudio.
+if (identical(unname(getOption("repos")["CRAN"]), "@CRAN@") ||
+    is.na(unname(getOption("repos")["CRAN"]))) {
+  options(repos = c(CRAN = "https://cloud.r-project.org"))
+}
+
 install_and_load <- function(packages) {
-  for (pkg in packages) {
-    if (!requireNamespace(pkg, quietly = TRUE)) {
-      install.packages(pkg)
-    }
-    library(pkg, character.only = TRUE)
+  missing <- packages[
+    !vapply(packages, requireNamespace, logical(1), quietly = TRUE)
+  ]
+
+  if (length(missing) > 0L) {
+    install.packages(missing, dependencies = TRUE)
   }
+
+  unavailable <- packages[
+    !vapply(packages, requireNamespace, logical(1), quietly = TRUE)
+  ]
+
+  if (length(unavailable) > 0L) {
+    stop(
+      "Required package(s) could not be installed: ",
+      paste(unavailable, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  invisible(
+    lapply(packages, library, character.only = TRUE)
+  )
 }
 
 install_and_load(required_packages)
