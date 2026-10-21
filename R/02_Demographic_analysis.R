@@ -76,11 +76,12 @@ run_oriented_wilcox <- function(data,
     correct = FALSE
   )
 
-  # Mann-Whitney U for the first sample (comparison group).
+  # wilcox.test(x, y) reports the Mann-Whitney U statistic for x
+  # on the 0..n_x*n_y scale.
   # r_rb > 0 = larger values in comparison than reference.
   n_cmp <- length(x_cmp)
   n_ref <- length(x_ref)
-  u_cmp <- unname(wt$statistic) - n_cmp * (n_cmp + 1) / 2
+  u_cmp <- unname(wt$statistic)
   r_rb <- 2 * u_cmp / (n_cmp * n_ref) - 1
 
   tibble::tibble(
@@ -180,15 +181,16 @@ run_oriented_fisher_event <- function(data,
 apply_family_adjustment <- function(df) {
   df |>
     dplyr::group_by(family_id) |>
-    dplyr::mutate(
-      p_adj = dplyr::if_else(
-        dplyr::first(adjustment_method) == "none",
-        p_raw,
-        stats::p.adjust(
-          p_raw,
-          method = dplyr::first(adjustment_method)
-        )
-      )
+    dplyr::group_modify(
+      ~ {
+        method <- dplyr::first(.x$adjustment_method)
+        .x$p_adj <- if (identical(method, "none")) {
+          .x$p_raw
+        } else {
+          stats::p.adjust(.x$p_raw, method = method)
+        }
+        .x
+      }
     ) |>
     dplyr::ungroup()
 }
