@@ -709,6 +709,17 @@ readr::write_csv(
 )
 
 # Coefficient-level output is descriptive/model-shape information only.
+# nnet/broom versions can encode factor terms either as SEXFemale/APOE_E4E4+
+# or as SEX[T.Female]/APOE_E4[T.E4+]. Normalize these labels so exported
+# results and downstream figures are stable across package versions.
+normalize_multinom_term <- function(x) {
+  dplyr::case_when(
+    x == "SEXFemale" ~ "SEX[T.Female]",
+    x == "APOE_E4E4+" ~ "APOE_E4[T.E4+]",
+    TRUE ~ x
+  )
+}
+
 tidy_multinom_or <- function(fit, gene) {
   broom::tidy(
     fit,
@@ -717,6 +728,7 @@ tidy_multinom_or <- function(fit, gene) {
   ) %>%
     dplyr::filter(term != "(Intercept)") %>%
     dplyr::mutate(
+      term = normalize_multinom_term(term),
       gene = gene,
       inference_role = "shape inspection; global gene-block LRT is primary"
     )
@@ -761,7 +773,8 @@ if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 
 # Ensure model and tidy data exist
 model_plot <- model_ATXN2_final
-tt_plot <- broom::tidy(model_plot, exponentiate = TRUE, conf.int = TRUE)
+tt_plot <- broom::tidy(model_plot, exponentiate = TRUE, conf.int = TRUE) %>%
+  dplyr::mutate(term = normalize_multinom_term(term))
 
 # --- Settings Colors & Limits
 cols_outcome <- c("BD" = "#8CBDE6", "SCZ" = "#F5A04D")
