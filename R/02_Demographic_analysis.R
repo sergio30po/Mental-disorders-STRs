@@ -84,16 +84,10 @@ run_oriented_wilcox <- function(data,
   u_cmp <- unname(wt$statistic)
   r_rb <- 2 * u_cmp / (n_cmp * n_ref) - 1
 
-  # Obtain a 95% CI from effectsize, then explicitly align its sign to the
-  # comparison/reference convention above. This keeps the CI independent of
-  # factor-level defaults used by external packages.
-  d_ci <- d |>
-    dplyr::mutate(
-      group = factor(group, levels = c(reference, comparison))
-    )
-
+  # Obtain a 95% CI directly from the numeric comparison/reference
+  # vectors. Passing numeric vectors avoids any factor-level ambiguity.
   rb_ci_obj <- suppressMessages(
-    effectsize::rank_biserial(value ~ group, data = d_ci, ci = 0.95)
+    effectsize::rank_biserial(x_cmp, x_ref, ci = 0.95)
   )
   rb_ci_df <- as.data.frame(rb_ci_obj)
 
@@ -108,6 +102,7 @@ run_oriented_wilcox <- function(data,
   rb_ci_high <- if (!is.na(ci_high_col)) rb_ci_df[[ci_high_col]][1] else NA_real_
   rb_pkg <- if (!is.na(effect_col)) rb_ci_df[[effect_col]][1] else NA_real_
 
+  # Align CI orientation defensively with the explicitly computed r_rb.
   if (
     !is.na(rb_pkg) &&
     !is.na(rb_ci_low) &&
@@ -243,7 +238,7 @@ mean_sd(MENTAL, "PATHOLOGY", "DURATION", "Observed disease duration")
 
 # Omnibus current-age test retained as descriptive context.
 print(stats::kruskal.test(AGE ~ PATHOLOGY, data = DT))
-print(effectsize::epsilon_squared(AGE ~ PATHOLOGY, data = DT))
+print(rcompanion::epsilonSquared(x = DT$AGE, g = DT$PATHOLOGY, ci = TRUE))
 
 # ------------------------------------------------------------------------------
 # Table 1 continuous comparisons
