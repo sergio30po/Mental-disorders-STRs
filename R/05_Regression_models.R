@@ -525,7 +525,10 @@ print(htt_age_spline_result, width = Inf)
 #   Coefficient-level p-values are retained for model-shape inspection only.
 
 # Data prep ---------------------------------------------------------------------
-DT <- DT %>%
+# Work on a local modeling copy so downstream scripts receive the original DT.
+# In particular, filtering expanded/missing genotype codes here must not mutate the
+# shared cohort object later used by the HTT meta-analysis.
+DT_model <- DT %>%
   dplyr::mutate(
     PATHOLOGY = stats::relevel(factor(PATHOLOGY), ref = "CONTROL"),
     SEX = factor(SEX)
@@ -566,7 +569,7 @@ derive_short_long <- function(df, gene) {
 }
 
 for (g in c("HTT", "ATXN1", "ATXN2")) {
-  DT <- derive_short_long(DT, g)
+  DT_model <- derive_short_long(DT_model, g)
 }
 
 drop_na_vars <- function(df, vars) {
@@ -582,7 +585,7 @@ vars_allele <- c(
   "SHORT_ATXN2", "LONG_ATXN2"
 )
 
-DT_allele <- drop_na_vars(DT, vars_allele)
+DT_allele <- drop_na_vars(DT_model, vars_allele)
 
 fit_gene_multinom <- function(df,
                               outcome = "PATHOLOGY",
