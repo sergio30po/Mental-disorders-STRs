@@ -240,9 +240,44 @@ run_onset_binary <- function(data,
   )
 }
 
+# Derive within-participant ordered alleles consistently with
+# 04_CAG_repeat_sizes.R and 05_Regression_models.R.
+derive_ordered_onset_alleles <- function(df) {
+  for (gene in c("HTT", "ATXN1", "ATXN2")) {
+    raw1 <- paste0("ALLELE1_", gene)
+    raw2 <- paste0("ALLELE2_", gene)
+    short_name <- paste0("SHORT_", gene)
+    long_name <- paste0("LONG_", gene)
+
+    if (!all(c(raw1, raw2) %in% names(df))) {
+      stop(
+        "Missing raw allele column(s) for ", gene, ": ",
+        paste(setdiff(c(raw1, raw2), names(df)), collapse = ", "),
+        call. = FALSE
+      )
+    }
+
+    a1 <- suppressWarnings(as.numeric(df[[raw1]]))
+    a2 <- suppressWarnings(as.numeric(df[[raw2]]))
+
+    df[[short_name]] <- ifelse(
+      is.na(a1) | is.na(a2),
+      NA_real_,
+      pmin(a1, a2)
+    )
+    df[[long_name]] <- ifelse(
+      is.na(a1) | is.na(a2),
+      NA_real_,
+      pmax(a1, a2)
+    )
+  }
+
+  df
+}
+
 onset_datasets <- list(
-  BD = BD,
-  SCZ = SCZ
+  BD = derive_ordered_onset_alleles(BD),
+  SCZ = derive_ordered_onset_alleles(SCZ)
 )
 
 onset_genes <- tibble::tribble(
@@ -316,13 +351,13 @@ readr::write_csv(
 # ------------------------------------------------------------------------------
 
 onset_cag_plan <- tibble::tribble(
-  ~cohort_scope, ~gene,   ~short_var,       ~long_var,        ~code_var,
-  "BD",          "HTT",   "ALLELE1_HTT",    "ALLELE2_HTT",    "HTT_CODE",
-  "BD",          "ATXN1", "ALLELE1_ATXN1",  "ALLELE2_ATXN1",  "ATXN1_CODE",
-  "BD",          "ATXN2", "ALLELE1_ATXN2",  "ALLELE2_ATXN2",  "ATXN2_CODE",
-  "SCZ",         "HTT",   "ALLELE1_HTT",    "ALLELE2_HTT",    "HTT_CODE",
-  "SCZ",         "ATXN1", "ALLELE1_ATXN1",  "ALLELE2_ATXN1",  "ATXN1_CODE",
-  "SCZ",         "ATXN2", "ALLELE1_ATXN2",  "ALLELE2_ATXN2",  "ATXN2_CODE"
+  ~cohort_scope, ~gene,   ~short_var,     ~long_var,      ~code_var,
+  "BD",          "HTT",   "SHORT_HTT",    "LONG_HTT",    "HTT_CODE",
+  "BD",          "ATXN1", "SHORT_ATXN1",  "LONG_ATXN1",  "ATXN1_CODE",
+  "BD",          "ATXN2", "SHORT_ATXN2",  "LONG_ATXN2",  "ATXN2_CODE",
+  "SCZ",         "HTT",   "SHORT_HTT",    "LONG_HTT",    "HTT_CODE",
+  "SCZ",         "ATXN1", "SHORT_ATXN1",  "LONG_ATXN1",  "ATXN1_CODE",
+  "SCZ",         "ATXN2", "SHORT_ATXN2",  "LONG_ATXN2",  "ATXN2_CODE"
 ) %>%
   dplyr::mutate(
     family_id = "ONSET_CAG_GLOBAL_EXPLORATORY",
