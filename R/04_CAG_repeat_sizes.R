@@ -421,7 +421,7 @@ main_omnibus_plan <- allele_plan %>%
 
 main_pairwise_contrasts <- tibble::tribble(
   ~positive, ~reference,
-  "BD",      "SCZ",
+  "SCZ",     "BD",
   "BD",      "CONTROL",
   "SCZ",     "CONTROL"
 )
