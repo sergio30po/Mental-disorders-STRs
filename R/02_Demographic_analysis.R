@@ -1,27 +1,32 @@
 # Script name: 02_Demographic_analysis.R
 # ==============================================================================
 # Title: Descriptive analysis of psychiatric cohorts (SCZ, BD, Controls).
-
+#
 # Author: Sergio Pérez Oliveira
-
-# Description: This script performs descriptive comparisons across psychiatric 
-#              groups (SCZ, BD, Controls) and genotype frequency analyses for 
-#              HTT, ATXN1 (SCA1) and ATXN2 (SCA2) loci across subgroups (e.g., binary subtype, 
-#              CD, controls). Analyses include demographic, clinical, lifestyle 
-#              variables and STR genotype distributions.
-
-# Inputs:
-#   - Manually selected environment file with custom functions (.R)
-#   - Manually selected data file to update DT, SCZ_CONTROLES, BD_CONTROLES
-#   - Dataframes: DT, MENTAL, BD, SCZ, SCZ_CONTROLES, BD_CONTROLES
-
+#
+# Purpose:
+#   Descriptive demographic/clinical comparisons used in Table 1, with explicit
+#   and reproducible comparison/reference orientation.
+#
+# Diagnostic reference convention:
+#   - CONTROL is always the reference whenever controls are included.
+#   - For the direct BD/SCZ comparison, BD is the reference and SCZ is the
+#     comparison group.
+#
+# Effect orientation:
+#   - Continuous outcomes: rank-biserial > 0 means larger values in the
+#     comparison group than in the reference group.
+#   - Binary outcomes: OR = odds(event in comparison) / odds(event in reference).
+#
+# Table 1 binary events:
+#   - SEX: Male
+#   - SMOKER: Smoking
+#   - COFFEE: Coffee
+#
 # Outputs:
-#   - Descriptive statistics (mean ± SD, proportions)
-#   - Non-parametric tests (Wilcoxon, Kruskal-Wallis, Dunn)
-#   - Pairwise tests (Wilcoxon, Fisher's exact with Holm correction)
-#   - Effect sizes (rank biserial)
-#   - Genotype frequency tables and pairwise comparisons
-#   - Missing data summary
+#   - Console descriptive summaries.
+#   - results/reviewer_revision/02_Table1_continuous_results.csv
+#   - results/reviewer_revision/02_Table1_categorical_results.csv
 # ==============================================================================
 
 # Load environment ----
@@ -29,105 +34,343 @@ Env_path <- file.choose()
 source(Env_path)
 rm(Env_path)
 
-# Age at onset ----
-mean_sd(MENTAL, "PATHOLOGY", "ONSET_AGE", "Age at onset")
-wilcox.test(ONSET_AGE ~ PATHOLOGY, data = MENTAL, exact = TRUE)
-rank_biserial(ONSET_AGE ~ PATHOLOGY, data = MENTAL)
-
-# Age at death / last visit ----
-mean_sd(DT, "PATHOLOGY", "AGE", "Age at death / last visit")
-kruskal.test(AGE ~ PATHOLOGY, data = DT)
-epsilonSquared(x=DT$AGE,g=DT$PATHOLOGY, ci=TRUE)
-dunn <- dunnTest(DT$AGE ~ DT$PATHOLOGY, method = "holm")
-print(dunn, dunn.test.results = TRUE)
-pairwise.wilcox.test(x = DT$AGE, g = DT$PATHOLOGY, p.adjust.method = "holm")
-
-# Rank biserial effect sizes by pairwise comparison
-levels <- unique(DT$PATHOLOGY)
-comparisons <- combn(levels, 2, simplify = FALSE)
-for (pair in comparisons) {
-  cat("\nComparison:", pair[1], "vs", pair[2], "\n")
-  sub_data <- subset(DT, PATHOLOGY %in% pair)
-  sub_data$PATHOLOGY <- factor(sub_data$PATHOLOGY, levels = pair)
-  print(rank_biserial(AGE ~ PATHOLOGY, data = sub_data))
+revision_dir <- file.path("results", "reviewer_revision")
+if (!dir.exists(revision_dir)) {
+  dir.create(revision_dir, recursive = TRUE)
 }
 
-# Disease duration ----
-mean_sd(MENTAL, "PATHOLOGY", "DURATION", "Disease duration")
-wilcox.test(DURATION ~ PATHOLOGY, data = MENTAL, exact = TRUE)
-pairwise.wilcox.test(x = MENTAL$DURATION, g = MENTAL$PATHOLOGY, p.adjust.method = "holm")
-rank_biserial(DURATION ~ PATHOLOGY, data = MENTAL)
+# ------------------------------------------------------------------------------
+# Helpers: explicitly oriented Table 1 comparisons
+# ------------------------------------------------------------------------------
 
+run_oriented_wilcox <- function(data,
+                                group_col,
+                                value_col,
+                                comparison,
+                                reference,
+                                test_id,
+                                family_id,
+                                adjustment_method = "none") {
 
-# Sex distribution ----
-Table <- TABLE(DT, "PATHOLOGY", "SEX", "Sex distribution")
-rowPercents(Table)
-my_function(Table)
-pairwise_fisher_test(Table, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
+  d <- data |>
+    dplyr::transmute(
+      group = as.character(.data[[group_col]]),
+      value = suppressWarnings(as.numeric(.data[[value_col]]))
+    ) |>
+    dplyr::filter(
+      group %in% c(reference, comparison),
+      !is.na(value)
+    )
 
-# Smoking status ----
-smoking_tab <- TABLE(MENTAL, "PATHOLOGY", "SMOKER", "Smoking by pathology")
-rowPercents(smoking_tab)
-my_function(smoking_tab)
-pairwise_fisher_test(smoking_tab, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
+  x_cmp <- d$value[d$group == comparison]
+  x_ref <- d$value[d$group == reference]
 
-# Coffee consumption ----
-coffee_tab <- TABLE(MENTAL, "PATHOLOGY", "COFFEE", "Coffee consumption by pathology")
-rowPercents(coffee_tab)
-my_function(coffee_tab)
-pairwise_fisher_test(coffee_tab, p.adjust.method = "holm", conf.int = TRUE, detailed = TRUE)
+  if (length(x_cmp) == 0L || length(x_ref) == 0L) {
+    stop("Missing comparison/reference data for ", test_id, call. = FALSE)
+  }
 
-# Cognitive decline ----
+  wt <- stats::wilcox.test(
+    x_cmp,
+    x_ref,
+    exact = FALSE,
+    correct = FALSE
+  )
+
+  # Mann-Whitney U for the first sample (comparison group).
+  # r_rb > 0 = larger values in comparison than reference.
+  n_cmp <- length(x_cmp)
+  n_ref <- length(x_ref)
+  u_cmp <- unname(wt$statistic) - n_cmp * (n_cmp + 1) / 2
+  r_rb <- 2 * u_cmp / (n_cmp * n_ref) - 1
+
+  tibble::tibble(
+    test_id = test_id,
+    family_id = family_id,
+    adjustment_method = adjustment_method,
+    variable = value_col,
+    comparison = comparison,
+    reference = reference,
+    contrast = paste0(comparison, " vs ", reference),
+    effect_definition = paste0(
+      "rank-biserial > 0 = larger ", value_col,
+      " in comparison vs reference"
+    ),
+    n_comparison = n_cmp,
+    n_reference = n_ref,
+    mean_comparison = mean(x_cmp),
+    sd_comparison = stats::sd(x_cmp),
+    mean_reference = mean(x_ref),
+    sd_reference = stats::sd(x_ref),
+    rank_biserial = r_rb,
+    p_raw = wt$p.value
+  )
+}
+
+run_oriented_fisher_event <- function(data,
+                                      group_col,
+                                      outcome_col,
+                                      event,
+                                      comparison,
+                                      reference,
+                                      test_id,
+                                      family_id,
+                                      adjustment_method = "none") {
+
+  d <- data |>
+    dplyr::transmute(
+      group = as.character(.data[[group_col]]),
+      outcome = as.character(.data[[outcome_col]])
+    ) |>
+    dplyr::filter(
+      group %in% c(reference, comparison),
+      !is.na(outcome)
+    )
+
+  if (!all(c(reference, comparison) %in% unique(d$group))) {
+    stop("Missing comparison/reference group for ", test_id, call. = FALSE)
+  }
+
+  if (!event %in% unique(d$outcome)) {
+    stop("Event '", event, "' not found for ", test_id, call. = FALSE)
+  }
+
+  a <- sum(d$group == comparison & d$outcome == event)
+  b <- sum(d$group == comparison & d$outcome != event)
+  c0 <- sum(d$group == reference & d$outcome == event)
+  d0 <- sum(d$group == reference & d$outcome != event)
+
+  tab <- matrix(
+    c(a, b, c0, d0),
+    nrow = 2,
+    byrow = TRUE,
+    dimnames = list(
+      group = c(comparison, reference),
+      outcome = c(event, "Other")
+    )
+  )
+
+  ft <- stats::fisher.test(tab, conf.int = TRUE)
+
+  tibble::tibble(
+    test_id = test_id,
+    family_id = family_id,
+    adjustment_method = adjustment_method,
+    variable = outcome_col,
+    event = event,
+    comparison = comparison,
+    reference = reference,
+    contrast = paste0(comparison, " vs ", reference),
+    effect_definition = paste0(
+      "OR = odds(", event, " in comparison) / odds(",
+      event, " in reference)"
+    ),
+    n_comparison = a + b,
+    n_reference = c0 + d0,
+    event_comparison = a,
+    event_reference = c0,
+    event_pct_comparison = 100 * a / (a + b),
+    event_pct_reference = 100 * c0 / (c0 + d0),
+    odds_ratio = unname(ft$estimate),
+    conf_low = unname(ft$conf.int[1]),
+    conf_high = unname(ft$conf.int[2]),
+    p_raw = ft$p.value
+  )
+}
+
+apply_family_adjustment <- function(df) {
+  df |>
+    dplyr::group_by(family_id) |>
+    dplyr::mutate(
+      p_adj = dplyr::if_else(
+        dplyr::first(adjustment_method) == "none",
+        p_raw,
+        stats::p.adjust(
+          p_raw,
+          method = dplyr::first(adjustment_method)
+        )
+      )
+    ) |>
+    dplyr::ungroup()
+}
+
+# ------------------------------------------------------------------------------
+# Descriptive summaries
+# ------------------------------------------------------------------------------
+
+mean_sd(MENTAL, "PATHOLOGY", "ONSET_AGE", "Age at psychiatric onset")
+mean_sd(DT, "PATHOLOGY", "AGE", "Age at evaluation / last visit")
+mean_sd(MENTAL, "PATHOLOGY", "DURATION", "Observed disease duration")
+
+# Omnibus current-age test retained as descriptive context.
+print(stats::kruskal.test(AGE ~ PATHOLOGY, data = DT))
+print(effectsize::epsilon_squared(AGE ~ PATHOLOGY, data = DT))
+
+# ------------------------------------------------------------------------------
+# Table 1 continuous comparisons
+# ------------------------------------------------------------------------------
+
+continuous_results <- dplyr::bind_rows(
+  run_oriented_wilcox(
+    MENTAL, "PATHOLOGY", "ONSET_AGE",
+    comparison = "SCZ", reference = "BD",
+    test_id = "TABLE1__ONSET_AGE__SCZ_vs_BD",
+    family_id = "TABLE1_ONSET_AGE",
+    adjustment_method = "none"
+  ),
+  run_oriented_wilcox(
+    DT, "PATHOLOGY", "AGE",
+    comparison = "BD", reference = "CONTROL",
+    test_id = "TABLE1__AGE__BD_vs_CONTROL",
+    family_id = "TABLE1_AGE_DIAGNOSIS",
+    adjustment_method = "holm"
+  ),
+  run_oriented_wilcox(
+    DT, "PATHOLOGY", "AGE",
+    comparison = "SCZ", reference = "CONTROL",
+    test_id = "TABLE1__AGE__SCZ_vs_CONTROL",
+    family_id = "TABLE1_AGE_DIAGNOSIS",
+    adjustment_method = "holm"
+  ),
+  run_oriented_wilcox(
+    DT, "PATHOLOGY", "AGE",
+    comparison = "SCZ", reference = "BD",
+    test_id = "TABLE1__AGE__SCZ_vs_BD",
+    family_id = "TABLE1_AGE_DIAGNOSIS",
+    adjustment_method = "holm"
+  ),
+  run_oriented_wilcox(
+    MENTAL, "PATHOLOGY", "DURATION",
+    comparison = "SCZ", reference = "BD",
+    test_id = "TABLE1__DURATION__SCZ_vs_BD",
+    family_id = "TABLE1_DURATION",
+    adjustment_method = "none"
+  )
+) |>
+  apply_family_adjustment()
+
+readr::write_csv(
+  continuous_results,
+  file.path(revision_dir, "02_Table1_continuous_results.csv")
+)
+
+# ------------------------------------------------------------------------------
+# Table 1 categorical comparisons
+# ------------------------------------------------------------------------------
+
+categorical_results <- dplyr::bind_rows(
+  # SEX: Male event; three diagnostic pairwise comparisons, Holm-adjusted.
+  run_oriented_fisher_event(
+    DT, "PATHOLOGY", "SEX", "Male",
+    comparison = "BD", reference = "CONTROL",
+    test_id = "TABLE1__SEX_MALE__BD_vs_CONTROL",
+    family_id = "TABLE1_SEX_DIAGNOSIS",
+    adjustment_method = "holm"
+  ),
+  run_oriented_fisher_event(
+    DT, "PATHOLOGY", "SEX", "Male",
+    comparison = "SCZ", reference = "CONTROL",
+    test_id = "TABLE1__SEX_MALE__SCZ_vs_CONTROL",
+    family_id = "TABLE1_SEX_DIAGNOSIS",
+    adjustment_method = "holm"
+  ),
+  run_oriented_fisher_event(
+    DT, "PATHOLOGY", "SEX", "Male",
+    comparison = "SCZ", reference = "BD",
+    test_id = "TABLE1__SEX_MALE__SCZ_vs_BD",
+    family_id = "TABLE1_SEX_DIAGNOSIS",
+    adjustment_method = "holm"
+  ),
+
+  # Lifestyle variables are available only in the psychiatric cohorts.
+  run_oriented_fisher_event(
+    MENTAL, "PATHOLOGY", "SMOKER", "Smoking",
+    comparison = "SCZ", reference = "BD",
+    test_id = "TABLE1__SMOKING__SCZ_vs_BD",
+    family_id = "TABLE1_SMOKING",
+    adjustment_method = "none"
+  ),
+  run_oriented_fisher_event(
+    MENTAL, "PATHOLOGY", "COFFEE", "Coffee",
+    comparison = "SCZ", reference = "BD",
+    test_id = "TABLE1__COFFEE__SCZ_vs_BD",
+    family_id = "TABLE1_COFFEE",
+    adjustment_method = "none"
+  )
+) |>
+  apply_family_adjustment()
+
+readr::write_csv(
+  categorical_results,
+  file.path(revision_dir, "02_Table1_categorical_results.csv")
+)
+
+cat("\n============================================================\n")
+cat("TABLE 1 CONTINUOUS RESULTS — EXPLICIT ORIENTATION\n")
+cat("CONTROL reference when present; BD reference for SCZ vs BD.\n")
+cat("============================================================\n")
+print(continuous_results, n = Inf, width = Inf)
+
+cat("\n============================================================\n")
+cat("TABLE 1 CATEGORICAL RESULTS — EXPLICIT ORIENTATION\n")
+cat("OR = odds(event in comparison) / odds(event in reference).\n")
+cat("============================================================\n")
+print(categorical_results, n = Inf, width = Inf)
+
+# ------------------------------------------------------------------------------
+# Cognitive status and subtype descriptive summaries
+# ------------------------------------------------------------------------------
 
 cd_tab <- table(BD$CD)
 cd_percent <- round(prop.table(cd_tab) * 100, 2)
-cd_tab
-cd_percent
+print(cd_tab)
+print(cd_percent)
 
 cd_bin_tab <- table(BD$CD_BINARY)
-round(prop.table(cd_bin_tab) * 100, 2)
-cd_bin_tab
+print(round(prop.table(cd_bin_tab) * 100, 2))
+print(cd_bin_tab)
 
 cd_tab <- table(SCZ$CD)
 cd_percent <- round(prop.table(cd_tab) * 100, 2)
-cd_tab
-cd_percent
+print(cd_tab)
+print(cd_percent)
 
 cd_bin_tab <- table(SCZ$CD_BINARY)
-round(prop.table(cd_bin_tab) * 100, 2)
-cd_bin_tab
-
-# Subtype of pathology ----
+print(round(prop.table(cd_bin_tab) * 100, 2))
+print(cd_bin_tab)
 
 subtype_tab <- table(BD$PATHOLOGY_TYPE)
-round(prop.table(subtype_tab) * 100, 2)
-subtype_tab
+print(round(prop.table(subtype_tab) * 100, 2))
+print(subtype_tab)
+
 subtype_bin_tab <- table(BD$PATHOLOGY_TYPE_BINARY)
-round(prop.table(subtype_bin_tab) * 100, 2)
-subtype_bin_tab
+print(round(prop.table(subtype_bin_tab) * 100, 2))
+print(subtype_bin_tab)
 
 subtype_TBP_tab <- table(BD$BD_type)
-round(prop.table(subtype_TBP_tab) * 100, 2)
-subtype_TBP_tab
-
+print(round(prop.table(subtype_TBP_tab) * 100, 2))
+print(subtype_TBP_tab)
 
 SCZ_type_tab <- table(SCZ$PATHOLOGY_TYPE)
-round(prop.table(SCZ_type_tab) * 100, 2)
-SCZ_type_tab
+print(round(prop.table(SCZ_type_tab) * 100, 2))
+print(SCZ_type_tab)
+
 SCZ_type_bin_tab <- table(SCZ$PATHOLOGY_TYPE_BINARY)
-round(prop.table(SCZ_type_bin_tab) * 100, 2)
-SCZ_type_bin_tab
+print(round(prop.table(SCZ_type_bin_tab) * 100, 2))
+print(SCZ_type_bin_tab)
 
+# Missing-data audit ------------------------------------------------------------
 
-# Missing data ----
-DT %>%
-  group_by(PATHOLOGY) %>%
-  summarise(across(everything(), ~ sum(is.na(.))))
+print(
+  DT %>%
+    dplyr::group_by(PATHOLOGY) %>%
+    dplyr::summarise(dplyr::across(dplyr::everything(), ~ sum(is.na(.))))
+)
 
-MENTAL %>%
-  group_by(PATHOLOGY) %>%
-  summarise(across(everything(), ~ sum(is.na(.))))
+print(
+  MENTAL %>%
+    dplyr::group_by(PATHOLOGY) %>%
+    dplyr::summarise(dplyr::across(dplyr::everything(), ~ sum(is.na(.))))
+)
 
-
-# Session info ----
+# Session info ------------------------------------------------------------------
 sessionInfo()
