@@ -154,7 +154,7 @@ plan_main <- cross_gene_comparisons(
     ~case, ~reference,
     "BD",  "CONTROL",
     "SCZ", "CONTROL",
-    "BD",  "SCZ"
+    "SCZ", "BD"
   )
 ) |>
   dplyr::mutate(
@@ -336,15 +336,15 @@ key_htt_bdi <- ia_results |>
 print(key_htt_bdi)
 
 cat("\n============================================================\n")
-cat("ATXN1 IA, BD vs SCZ\n")
+cat("ATXN1 IA, SCZ vs BD (BD reference)\n")
 cat("============================================================\n")
 
 key_atxn1_bd_scz <- ia_results |>
   dplyr::filter(
     gene == "ATXN1",
     analysis == "IA frequency: main diagnostic comparison",
-    case == "BD",
-    reference == "SCZ"
+    case == "SCZ",
+    reference == "BD"
   )
 
 print(key_atxn1_bd_scz)
