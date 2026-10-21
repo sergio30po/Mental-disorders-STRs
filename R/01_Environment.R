@@ -23,8 +23,7 @@ required_packages <- c(
   "tidyverse", "readxl", "writexl",
   "FSA", "rcompanion", "rstatix", "effectsize",
   "ggpubr", "nnet", "lmtest", "broom", "patchwork",
-  "igraph", "visNetwork", "grid",
-  "survival", "survminer"
+  "igraph", "visNetwork", "grid"
 )
 
 # Use a fixed CRAN mirror so package installation also works outside RStudio.
