@@ -17,13 +17,14 @@
 # ==============================================================================
 
 # Required packages ----
+# Keep this list limited to packages used by the analysis scripts.
+# This avoids installation failures from obsolete or unused dependencies.
 required_packages <- c(
-  "pwr", "rcompanion","writexl", "FSA", "installr", "xlsx", "dplyr", "readxl", "ggplot2",
-  "corrplot", "devtools", "ggpubr", "lsr", "Rcmdr", "survival", "KMsurv",
-  "survMisc", "survminer", "ggfortify", "flexsurv", "actuar", "nortest",
-  "rstatix", "gtsummary", "car", "DataExplorer", "effectsize", "lmtest", 
-  "nnet","igraph","tidyverse","ggraph","tidygraph","visNetwork","tidyr",
-  "scales","stringr","grid","broom","boot","ggeffects","visreg","patchwork","rlang","cowplot"
+  "tidyverse", "readxl", "writexl",
+  "FSA", "rcompanion", "rstatix", "effectsize",
+  "ggpubr", "nnet", "lmtest", "broom", "patchwork",
+  "igraph", "visNetwork", "grid",
+  "survival", "survminer"
 )
 
 install_and_load <- function(packages) {
@@ -38,7 +39,7 @@ install_and_load <- function(packages) {
 install_and_load(required_packages)
 
 # Input section ----
-# Select working directory interactively (select the main branch as directory)
+# Select the repository root interactively as the working directory
 if (interactive()) {
   if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
     wd <- rstudioapi::selectDirectory(caption = "Select your working directory")
@@ -103,6 +104,11 @@ my_function <- function(matrix) {
   
   cat("\nMultiple comparisons:\n")
   print(pairwiseNominalIndependence(matrix, fisher = TRUE, chisq = TRUE, method = "holm"))
+}
+
+# Row percentages helper (avoids a GUI dependency solely for rowPercents())
+rowPercents <- function(x, digits = 2) {
+  round(100 * prop.table(x, margin = 1), digits)
 }
 
 # Frequency table printing function
