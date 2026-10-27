@@ -21,7 +21,7 @@
 #   - Descriptive statistics and exploratory tests for age at onset
 #   - Cross-sectional disease-duration comparisons with prespecified FDR control
 #   - Machine-readable duration testing plan and master results tables
-#   - Supplementary Figure 2 without survival/Cox/Kaplan-Meier panels
+#   - Supplementary Figure 2: IA vs NORMAL distributions for age at onset and observed disease duration
 # ==============================================================================
 
 # Load environment ----
@@ -43,63 +43,10 @@ SCZ_P <- subset(SCZ, SCZ$PATHOLOGY_TYPE_BINARY == "SCZ")
 SCZ_CD <- subset(SCZ, SCZ$CD_BINARY == "CD")
 SCZ_NOCD <- subset(SCZ, SCZ$CD_BINARY == "No-CD")
 
-# DESCRIPTIVE ONSET-AGE / OBSERVED-DURATION DEPENDENCY ----
-# This correlation is descriptive only. DURATION is not interpreted as progression.
-cor.test(BD$ONSET_AGE, BD$DURATION, method = "spearman", exact = FALSE)
-cor.test(SCZ$ONSET_AGE, SCZ$DURATION, method = "spearman", exact = FALSE)
+# ==============================================================================
+# 1. AGE-AT-ONSET ANALYSIS
+# ==============================================================================
 
-# Sup. Fig. 2A: Descriptive onset-age / observed-duration plots (BD and SCZ) ----
-cols_outcome <- c("BD" = "#8CBDE6", "SCZ" = "#F5A04D")
-
-make_cor_panel <- function(df, group = c("BD", "SCZ"),
-                           x = "ONSET_AGE", y = "DURATION",
-                           title = "") {
-  group <- match.arg(group)
-  col_use <- cols_outcome[group]
-  
-  d <- df %>%
-    dplyr::select(all_of(c(x, y))) %>%
-    dplyr::filter(!is.na(.data[[x]]), !is.na(.data[[y]]))
-  
-  ggplot(d, aes(x = .data[[x]], y = .data[[y]])) +
-    # CI in group color (only ribbon)
-    geom_smooth(method = "lm", se = TRUE, aes(fill = col_use),
-                color = "black", linewidth = 0.9, alpha = 0.35) +
-    # Points: filled by group color + black border
-    geom_point(shape = 20, fill = "black", color = "black",
-               stroke = 0.35, size = 2, alpha = 0.85) +
-    # Correlation text (Spearman)
-    stat_cor(method = "spearman", label.x.npc = "middle", label.y.npc = "top") +
-    labs(
-      x = "Age at onset (years)",
-      y = "Disease duration (years)",
-      title = title
-    ) +
-    theme_classic(base_size = 12) +
-    theme(plot.title = element_text(hjust = 0.5)) +
-    scale_fill_identity()
-}
-
-pA_BD  <- make_cor_panel(BD,  group = "BD",  title = "Bipolar disorder")
-pA_SCZ <- make_cor_panel(SCZ, group = "SCZ", title = "Schizophrenia")
-
-# Optional: same axes for comparability
-#xlim_all <- range(c(BD$ONSET_AGE, SCZ$ONSET_AGE), na.rm = TRUE)
-#ylim_all <- range(c(BD$DURATION,  SCZ$DURATION),  na.rm = TRUE)
-
-#pA_BD  <- pA_BD  + coord_cartesian(xlim = xlim_all, ylim = ylim_all)
-#pA_SCZ <- pA_SCZ + coord_cartesian(xlim = xlim_all, ylim = ylim_all)
-
-panel_A <- ggarrange(pA_BD, pA_SCZ, ncol = 2, align = "hv")
-panel_A
-ggsave(
-  filename = file.path(fig_dir, "Sup_Fig_2A.tiff"),
-  plot = panel_A,
-  device = "tiff",
-  width = 500, height = 160, units = "mm",
-  dpi = 600, compression = "lzw"
-)
-# 1. AGE-AT-ONSET ANALYSIS ======================================================
 #
 # Reviewer-driven revision:
 #   Age at onset is retained as a clinical outcome, but all genetic analyses are
@@ -914,24 +861,470 @@ print(
   width = Inf
 )
 
+# ==============================================================================
+# 4. REVISED SUPPLEMENTARY FIGURE 2
+# Age at onset and observed disease duration according to IA status
+# ==============================================================================
+#
+# Reviewer-driven figure:
+#
+#   A) Age at onset in BD
+#   B) Age at onset in SCZ
+#   C) Observed disease duration in BD
+#   D) Observed disease duration in SCZ
+#
+# For each clinical outcome, HTT, ATXN1 and ATXN2 are shown separately.
+# Only NORMAL and IA carriers are included in inferential comparisons.
+# EXPANDED alleles are excluded, consistently with the reviewer-facing analyses.
+#
+# Raw and BH-FDR-adjusted p-values are taken directly from:
+#   - onset_ia_results
+#   - duration_str_results
+#
+# No survival, Cox proportional-hazards, Kaplan-Meier, log-rank or progression
+# interpretation is used.
+# ==============================================================================
+
+
 # ------------------------------------------------------------------------------
-# Revised Supplementary Figure 2 -----------------------------------------------
-# The former survival panels are removed. Until the reviewer-driven
-# age-at-onset global tests are inspected, only the descriptive onset-age /
-# observed-duration panel is retained here. No model-selected ATXN1 panel is
-# generated automatically.
+# Figure settings
+# ------------------------------------------------------------------------------
 
-Sup_Fig_2 <- patchwork::wrap_elements(full = panel_A)
-
-print(Sup_Fig_2)
-
-ggsave(
-  filename = file.path(fig_dir, "Supplementary Figure 2.tiff"),
-  plot = Sup_Fig_2,
-  device = "tiff",
-  width = 400, height = 160, units = "mm",
-  dpi = 600, compression = "lzw"
+clinical_genes <- c(
+  "HTT",
+  "ATXN1",
+  "ATXN2"
 )
+
+clinical_code_vars <- c(
+  "HTT"   = "HTT_CODE",
+  "ATXN1" = "ATXN1_CODE",
+  "ATXN2" = "ATXN2_CODE"
+)
+
+
+# ------------------------------------------------------------------------------
+# P-value formatting
+# ------------------------------------------------------------------------------
+
+format_p_supfig <- function(x) {
+
+  dplyr::case_when(
+    is.na(x) ~ "NA",
+    x < 0.001 ~ "<0.001",
+    TRUE ~ sprintf("%.3f", x)
+  )
+}
+
+
+# ------------------------------------------------------------------------------
+# Convert each clinical outcome to long format
+# ------------------------------------------------------------------------------
+
+make_ia_clinical_long <- function(
+    data,
+    outcome_var
+) {
+
+  purrr::imap_dfr(
+    clinical_code_vars,
+    function(
+      code_var,
+      gene
+    ) {
+
+      tibble::tibble(
+        gene = gene,
+        group = as.character(
+          data[[code_var]]
+        ),
+        value = suppressWarnings(
+          as.numeric(
+            data[[outcome_var]]
+          )
+        )
+      )
+    }
+  ) %>%
+
+    dplyr::filter(
+      group %in% c(
+        "NORMAL",
+        "IA"
+      ),
+      !is.na(value),
+      is.finite(value)
+    ) %>%
+
+    dplyr::mutate(
+      gene = factor(
+        gene,
+        levels = clinical_genes
+      ),
+      group = factor(
+        group,
+        levels = c(
+          "NORMAL",
+          "IA"
+        ),
+        labels = c(
+          "Normal",
+          "IA"
+        )
+      )
+    )
+}
+
+
+# ------------------------------------------------------------------------------
+# Plot datasets
+# ------------------------------------------------------------------------------
+
+onset_bd_plot <- make_ia_clinical_long(
+  BD,
+  "ONSET_AGE"
+)
+
+onset_scz_plot <- make_ia_clinical_long(
+  SCZ,
+  "ONSET_AGE"
+)
+
+duration_bd_plot <- make_ia_clinical_long(
+  BD,
+  "DURATION"
+)
+
+duration_scz_plot <- make_ia_clinical_long(
+  SCZ,
+  "DURATION"
+)
+
+
+# ------------------------------------------------------------------------------
+# Statistical annotations
+# ------------------------------------------------------------------------------
+
+make_annotation_table <- function(
+    plot_data,
+    results_data,
+    scope
+) {
+  
+  y_range <- range(
+    plot_data$value,
+    na.rm = TRUE
+  )
+  
+  y_span <- diff(
+    y_range
+  )
+  
+  if (
+    !is.finite(y_span) ||
+    y_span == 0
+  ) {
+    y_span <- 1
+  }
+  
+  y_by_gene <- plot_data %>%
+    dplyr::group_by(
+      gene
+    ) %>%
+    dplyr::summarise(
+      y_max = max(
+        value,
+        na.rm = TRUE
+      ),
+      .groups = "drop"
+    )
+  
+  results_data %>%
+    dplyr::filter(
+      cohort_scope == scope,
+      predictor %in% clinical_genes
+    ) %>%
+    dplyr::transmute(
+      gene = factor(
+        predictor,
+        levels = clinical_genes
+      ),
+      
+      n_normal = n_reference,
+      n_ia = n_positive,
+      
+      p_raw = p_raw,
+      p_adj = p_adj
+    ) %>%
+    dplyr::left_join(
+      y_by_gene,
+      by = "gene"
+    ) %>%
+    dplyr::mutate(
+      y = y_max + 0.07 * y_span,
+      
+      label = paste0(
+        "n = ", n_normal, "/", n_ia,
+        "\nraw p = ", format_p_supfig(p_raw),
+        "\nBH p = ", format_p_supfig(p_adj)
+      )
+    )
+}
+
+
+ann_onset_bd <- make_annotation_table(
+  onset_bd_plot,
+  onset_ia_results,
+  "BD"
+)
+
+ann_onset_scz <- make_annotation_table(
+  onset_scz_plot,
+  onset_ia_results,
+  "SCZ"
+)
+
+ann_duration_bd <- make_annotation_table(
+  duration_bd_plot,
+  duration_str_results,
+  "BD_ALL"
+)
+
+ann_duration_scz <- make_annotation_table(
+  duration_scz_plot,
+  duration_str_results,
+  "SCZ_ALL"
+)
+
+
+# ------------------------------------------------------------------------------
+# Common plotting function
+# ------------------------------------------------------------------------------
+
+make_clinical_ia_panel <- function(
+    plot_data,
+    annotation_data,
+    title,
+    y_label
+) {
+
+  ggplot2::ggplot(
+    plot_data,
+    ggplot2::aes(
+      x = gene,
+      y = value,
+      fill = group
+    )
+  ) +
+
+    ggplot2::geom_boxplot(
+      ggplot2::aes(
+        group = interaction(
+          gene,
+          group
+        )
+      ),
+      position = ggplot2::position_dodge(
+        width = 0.72
+      ),
+      width = 0.58,
+      outlier.shape = NA,
+      linewidth = 0.45,
+      alpha = 0.70
+    ) +
+
+    ggplot2::geom_point(
+      ggplot2::aes(
+        group = group
+      ),
+      position = ggplot2::position_jitterdodge(
+        jitter.width = 0.12,
+        dodge.width = 0.72,
+        seed = 123
+      ),
+      shape = 21,
+      size = 1.25,
+      stroke = 0.20,
+      alpha = 0.60
+    ) +
+
+    ggplot2::geom_text(
+      data = annotation_data,
+      ggplot2::aes(
+        x = gene,
+        y = y,
+        label = label
+      ),
+      inherit.aes = FALSE,
+      size = 2.6,
+      lineheight = 0.90,
+      vjust = 0
+    ) +
+
+    ggplot2::scale_fill_manual(
+      values = c(
+        "Normal" = "grey80",
+        "IA" = "#4C78A8"
+      ),
+      name = "Allele status"
+    ) +
+
+    ggplot2::scale_x_discrete(
+      labels = c(
+        "HTT" = "HTT",
+        "ATXN1" = "ATXN1",
+        "ATXN2" = "ATXN2"
+      )
+    ) +
+
+    ggplot2::scale_y_continuous(
+      expand = ggplot2::expansion(
+        mult = c(
+          0.04,
+          0.20
+        )
+      )
+    ) +
+
+    ggplot2::labs(
+      title = title,
+      x = NULL,
+      y = y_label
+    ) +
+
+    ggplot2::theme_classic(
+      base_size = 10
+    ) +
+
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(
+        face = "bold",
+        hjust = 0.5,
+        size = 10
+      ),
+      axis.text.x = ggplot2::element_text(
+        face = "italic",
+        size = 9
+      ),
+      axis.title.y = ggplot2::element_text(
+        size = 9
+      ),
+      legend.position = "top",
+      legend.title = ggplot2::element_text(
+        size = 8
+      ),
+      legend.text = ggplot2::element_text(
+        size = 8
+      )
+    )
+}
+
+
+# ------------------------------------------------------------------------------
+# Build the four final panels
+# ------------------------------------------------------------------------------
+
+p_onset_bd <- make_clinical_ia_panel(
+  plot_data = onset_bd_plot,
+  annotation_data = ann_onset_bd,
+  title = "Bipolar disorder",
+  y_label = "Age at onset (years)"
+)
+
+p_onset_scz <- make_clinical_ia_panel(
+  plot_data = onset_scz_plot,
+  annotation_data = ann_onset_scz,
+  title = "Schizophrenia",
+  y_label = "Age at onset (years)"
+)
+
+p_duration_bd <- make_clinical_ia_panel(
+  plot_data = duration_bd_plot,
+  annotation_data = ann_duration_bd,
+  title = "Bipolar disorder",
+  y_label = "Observed disease duration (years)"
+)
+
+p_duration_scz <- make_clinical_ia_panel(
+  plot_data = duration_scz_plot,
+  annotation_data = ann_duration_scz,
+  title = "Schizophrenia",
+  y_label = "Observed disease duration (years)"
+)
+
+
+# ------------------------------------------------------------------------------
+# Final Supplementary Figure 2
+# ------------------------------------------------------------------------------
+
+Supplementary_Figure_2 <-
+  (
+    p_onset_bd |
+      p_onset_scz
+  ) /
+  (
+    p_duration_bd |
+      p_duration_scz
+  ) +
+
+  patchwork::plot_layout(
+    guides = "collect"
+  ) +
+
+  patchwork::plot_annotation(
+    tag_levels = "A"
+  ) &
+
+  ggplot2::theme(
+    legend.position = "top",
+    plot.tag = ggplot2::element_text(
+      face = "bold",
+      size = 13
+    )
+  )
+
+
+print(
+  Supplementary_Figure_2
+)
+
+
+# ------------------------------------------------------------------------------
+# Export TIFF
+# ------------------------------------------------------------------------------
+
+ggplot2::ggsave(
+  filename = file.path(
+    fig_dir,
+    "Supplementary_Figure_2_age_onset_duration.tiff"
+  ),
+  plot = Supplementary_Figure_2,
+  device = "tiff",
+  width = 180,
+  height = 170,
+  units = "mm",
+  dpi = 600,
+  compression = "lzw"
+)
+
+
+# ------------------------------------------------------------------------------
+# Export PNG
+# ------------------------------------------------------------------------------
+
+ggplot2::ggsave(
+  filename = file.path(
+    fig_dir,
+    "Supplementary_Figure_2_age_onset_duration.png"
+  ),
+  plot = Supplementary_Figure_2,
+  device = "png",
+  width = 180,
+  height = 170,
+  units = "mm",
+  dpi = 600
+)
+
 
 # Session info ----
 sessionInfo()

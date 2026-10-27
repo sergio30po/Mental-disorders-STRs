@@ -4,7 +4,7 @@
 #
 # Author: Sergio Pérez Oliveira
 #
-# Reviewer-driven revision:
+# Analysis framework:
 #   1) Treat continuous repeat length as a sensitivity analysis to transferred
 #      categorical IA thresholds.
 #   2) Define multiplicity families explicitly instead of applying local Holm
@@ -32,7 +32,7 @@
 #   - Dataframes created by the environment: DT, BD_CONTROLS, SCZ_CONTROLS.
 #
 # Outputs:
-#   - Testing plans and master result tables in results/reviewer_revision/
+#   - Testing plans and master result tables in the results directory
 #   - Allele-order QC table
 #   - Separate short- and long-allele frequency tables
 #   - Short-allele histogram, long-allele histogram and short×long 2D plot
@@ -59,7 +59,7 @@ if (!dir.exists(fig_dir)) {
 # ==============================================================================
 
 # ALLELE1/ALLELE2 are raw diploid allele fields and are NOT assumed to be
-# consistently ordered. Reviewer-facing "short" and "long" alleles are therefore
+# consistently ordered. "Short" and "long" alleles are therefore
 # derived within each participant as min(raw allele 1, raw allele 2) and
 # max(raw allele 1, raw allele 2), respectively.
 gene_map <- tibble::tribble(
@@ -705,7 +705,7 @@ readr::write_csv(
 )
 
 # ==============================================================================
-# 4. REVIEWER-FACING STATISTICAL OUTPUT
+# 4. KEY STATISTICAL OUTPUT
 # ==============================================================================
 
 cat("\n============================================================\n")
@@ -800,10 +800,23 @@ print(
 )
 
 # ==============================================================================
-# 5. SEPARATE SHORT/LONG FREQUENCY TABLES AND 2D DISTRIBUTIONS
-# ==============================================================================
+# ============================================================================== 
+# 5. SHORT/LONG ALLELE FREQUENCIES AND JOINT 2D DISTRIBUTIONS
+# ============================================================================== 
 
 diagnosis_levels <- c("CONTROL", "BD", "SCZ")
+
+diagnosis_labels <- c(
+  "CONTROL" = "Controls",
+  "BD" = "BD",
+  "SCZ" = "SCZ"
+)
+
+diagnosis_colors <- c(
+  "CONTROL" = "#BDBDBD",
+  "BD" = "#4C78A8",
+  "SCZ" = "#F28E2B"
+)
 
 DT_plot <- DT %>%
   dplyr::filter(as.character(PATHOLOGY) %in% diagnosis_levels) %>%
@@ -825,10 +838,12 @@ make_gene_distribution_outputs <- function(gene, short_var, long_var) {
     dplyr::filter(
       !is.na(PATHOLOGY),
       !is.na(short),
-      !is.na(long)
+      !is.na(long),
+      is.finite(short),
+      is.finite(long)
     )
 
-  # Separate frequency tables for short and long alleles
+  # Separate short- and long-allele frequency distributions.
   freq_short <- d %>%
     dplyr::count(PATHOLOGY, short, name = "count") %>%
     dplyr::group_by(PATHOLOGY) %>%
@@ -860,7 +875,7 @@ make_gene_distribution_outputs <- function(gene, short_var, long_var) {
     )
   )
 
-  # 2D genotype distribution: percentage of participants within diagnosis group
+  # Joint short x long distribution: percentage of participants within diagnosis.
   freq_2d <- d %>%
     dplyr::count(PATHOLOGY, short, long, name = "count") %>%
     dplyr::group_by(PATHOLOGY) %>%
@@ -878,137 +893,11 @@ make_gene_distribution_outputs <- function(gene, short_var, long_var) {
     )
   )
 
-  # Histograms use percentages because diagnostic group sizes differ markedly.
-  p_short <- ggplot2::ggplot(
-    d,
-    ggplot2::aes(x = short)
-  ) +
-    ggplot2::geom_histogram(
-      ggplot2::aes(
-        y = 100 * ggplot2::after_stat(count / sum(count))
-      ),
-      binwidth = 1,
-      boundary = 0.5,
-      color = "black",
-      fill = "grey75"
-    ) +
-    ggplot2::facet_wrap(
-      ~ PATHOLOGY,
-      ncol = 1,
-      scales = "free_y"
-    ) +
-    ggplot2::labs(
-      x = paste0(gene, " short allele (CAG repeats)"),
-      y = "Participants (%)"
-    ) +
-    ggplot2::theme_classic(base_size = 12)
-
-  p_long <- ggplot2::ggplot(
-    d,
-    ggplot2::aes(x = long)
-  ) +
-    ggplot2::geom_histogram(
-      ggplot2::aes(
-        y = 100 * ggplot2::after_stat(count / sum(count))
-      ),
-      binwidth = 1,
-      boundary = 0.5,
-      color = "black",
-      fill = "grey75"
-    ) +
-    ggplot2::facet_wrap(
-      ~ PATHOLOGY,
-      ncol = 1,
-      scales = "free_y"
-    ) +
-    ggplot2::labs(
-      x = paste0(gene, " long allele (CAG repeats)"),
-      y = "Participants (%)"
-    ) +
-    ggplot2::theme_classic(base_size = 12)
-
-  # Integer short×long combinations are summarized before plotting, avoiding
-  # overplotting. Point area represents the within-diagnosis percentage.
-  p_2d <- ggplot2::ggplot(
-    freq_2d,
-    ggplot2::aes(
-      x = short,
-      y = long,
-      size = percentage
-    )
-  ) +
-    ggplot2::geom_point(
-      shape = 21,
-      fill = "grey75",
-      color = "black",
-      alpha = 0.8
-    ) +
-    ggplot2::facet_wrap(
-      ~ PATHOLOGY,
-      ncol = 1
-    ) +
-    ggplot2::scale_size_area(
-      max_size = 8,
-      name = "Participants (%)"
-    ) +
-    ggplot2::labs(
-      x = paste0(gene, " short allele (CAG repeats)"),
-      y = paste0(gene, " long allele (CAG repeats)")
-    ) +
-    ggplot2::theme_classic(base_size = 12) +
-    ggplot2::theme(
-      legend.position = "right"
-    )
-
-  ggplot2::ggsave(
-    filename = file.path(
-      fig_dir,
-      paste0("04_", gene, "_short_allele_histogram.tiff")
-    ),
-    plot = p_short,
-    device = "tiff",
-    width = 180,
-    height = 240,
-    units = "mm",
-    dpi = 600,
-    compression = "lzw"
-  )
-
-  ggplot2::ggsave(
-    filename = file.path(
-      fig_dir,
-      paste0("04_", gene, "_long_allele_histogram.tiff")
-    ),
-    plot = p_long,
-    device = "tiff",
-    width = 180,
-    height = 240,
-    units = "mm",
-    dpi = 600,
-    compression = "lzw"
-  )
-
-  ggplot2::ggsave(
-    filename = file.path(
-      fig_dir,
-      paste0("04_", gene, "_short_by_long_2D.tiff")
-    ),
-    plot = p_2d,
-    device = "tiff",
-    width = 190,
-    height = 250,
-    units = "mm",
-    dpi = 600,
-    compression = "lzw"
-  )
-
   invisible(
     list(
+      data = d,
       frequency_1d = freq_1d,
-      frequency_2d = freq_2d,
-      short_plot = p_short,
-      long_plot = p_long,
-      plot_2d = p_2d
+      frequency_2d = freq_2d
     )
   )
 }
@@ -1021,7 +910,6 @@ distribution_outputs <- purrr::pmap(
 
 names(distribution_outputs) <- gene_map$gene
 
-# Combined CSVs for convenient downstream use
 all_1d_frequencies <- purrr::map_dfr(
   distribution_outputs,
   "frequency_1d"
@@ -1042,11 +930,414 @@ readr::write_csv(
   file.path(revision_dir, "04_all_genes_short_by_long_2D_frequencies.csv")
 )
 
+# Frequency QC: every within-diagnosis distribution should sum to 100%.
+frequency_qc_1d <- all_1d_frequencies %>%
+  dplyr::group_by(gene, PATHOLOGY, allele_position) %>%
+  dplyr::summarise(
+    total_percentage = sum(percentage, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+frequency_qc_2d <- all_2d_frequencies %>%
+  dplyr::group_by(gene, PATHOLOGY) %>%
+  dplyr::summarise(
+    total_percentage = sum(percentage, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+readr::write_csv(
+  frequency_qc_1d,
+  file.path(revision_dir, "04_allele_frequency_1D_QC.csv")
+)
+
+readr::write_csv(
+  frequency_qc_2d,
+  file.path(revision_dir, "04_allele_frequency_2D_QC.csv")
+)
+
+if (
+  any(abs(frequency_qc_1d$total_percentage - 100) > 1e-8) ||
+  any(abs(frequency_qc_2d$total_percentage - 100) > 1e-8)
+) {
+  stop(
+    "Allele-frequency QC failed: at least one distribution does not sum to 100%.",
+    call. = FALSE
+  )
+}
+
+# ============================================================================== 
+# 6. SUPPLEMENTARY FIGURE 1
+# ============================================================================== 
+
+if (!requireNamespace("patchwork", quietly = TRUE)) {
+  stop(
+    "Package 'patchwork' is required to compose Supplementary Figure 1.",
+    call. = FALSE
+  )
+}
+
+# For each gene, the figure contains the short-allele distribution, the
+# long-allele distribution, and the joint short x long distribution. Percentages
+# are calculated within each diagnostic group so that distributions are directly
+# comparable despite unequal group sizes.
+
+make_1d_frequency_panel <- function(gene_name, allele_name) {
+
+  d <- all_1d_frequencies %>%
+    dplyr::filter(
+      gene == gene_name,
+      allele_position == allele_name
+    ) %>%
+    dplyr::select(
+      PATHOLOGY,
+      CAG_size,
+      percentage
+    )
+
+  full_sizes <- seq(
+    min(d$CAG_size, na.rm = TRUE),
+    max(d$CAG_size, na.rm = TRUE),
+    by = 1
+  )
+
+  d <- d %>%
+    tidyr::complete(
+      PATHOLOGY = factor(diagnosis_levels, levels = diagnosis_levels),
+      CAG_size = full_sizes,
+      fill = list(percentage = 0)
+    ) %>%
+    dplyr::mutate(
+      PATHOLOGY = factor(PATHOLOGY, levels = diagnosis_levels)
+    )
+
+  allele_label <- if (allele_name == "SHORT") {
+    "Short allele"
+  } else {
+    "Long allele"
+  }
+
+  ggplot2::ggplot(
+    d,
+    ggplot2::aes(
+      x = CAG_size,
+      y = percentage,
+      fill = PATHOLOGY
+    )
+  ) +
+    ggplot2::geom_col(
+      position = ggplot2::position_dodge2(
+        width = 0.90,
+        preserve = "single",
+        padding = 0.08
+      ),
+      width = 0.84,
+      color = "black",
+      linewidth = 0.18
+    ) +
+    ggplot2::scale_fill_manual(
+      values = diagnosis_colors,
+      breaks = diagnosis_levels,
+      labels = diagnosis_labels,
+      name = "Diagnosis",
+      drop = FALSE,
+      guide = ggplot2::guide_legend(order = 1)
+    ) +
+    ggplot2::scale_x_continuous(
+      breaks = function(x) {
+        br <- pretty(x, n = 8)
+        br[br >= min(x) & br <= max(x)]
+      },
+      expand = ggplot2::expansion(mult = c(0.01, 0.02))
+    ) +
+    ggplot2::scale_y_continuous(
+      expand = ggplot2::expansion(mult = c(0, 0.06))
+    ) +
+    ggplot2::labs(
+      title = bquote(italic(.(gene_name)) ~ "-" ~ .(allele_label)),
+      x = "CAG repeat length",
+      y = "Participants (%)"
+    ) +
+    ggplot2::theme_classic(base_size = 10) +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(
+        face = "bold",
+        hjust = 0.5,
+        size = 11
+      ),
+      axis.title = ggplot2::element_text(size = 10),
+      axis.text = ggplot2::element_text(size = 8),
+      legend.position = "bottom",
+      legend.title = ggplot2::element_text(size = 9),
+      legend.text = ggplot2::element_text(size = 8),
+      plot.margin = ggplot2::margin(5, 5, 5, 5)
+    )
+}
+
+# Use a common point-size scale across all 2D panels so bubble areas are directly
+# comparable between genes and diagnostic groups. The same size limits and breaks
+# are therefore applied to HTT, ATXN1 and ATXN2.
+global_2d_max <- max(
+  all_2d_frequencies$percentage,
+  na.rm = TRUE
+)
+
+size_break_candidates <- c(1, 5, 10, 25, 50, 75)
+size_breaks_2d <- size_break_candidates[
+  size_break_candidates <= global_2d_max
+]
+
+if (length(size_breaks_2d) == 0) {
+  size_breaks_2d <- pretty(c(0, global_2d_max), n = 4)
+  size_breaks_2d <- size_breaks_2d[size_breaks_2d > 0]
+}
+
+make_2d_frequency_panel <- function(gene_name) {
+
+  d <- all_2d_frequencies %>%
+    dplyr::filter(gene == gene_name) %>%
+    dplyr::mutate(
+      PATHOLOGY = factor(PATHOLOGY, levels = diagnosis_levels)
+    )
+
+  x_range <- range(d$short, na.rm = TRUE)
+  y_range <- range(d$long, na.rm = TRUE)
+
+  ggplot2::ggplot(
+    d,
+    ggplot2::aes(
+      x = short,
+      y = long,
+      size = percentage,
+      fill = PATHOLOGY
+    )
+  ) +
+    ggplot2::geom_abline(
+      slope = 1,
+      intercept = 0,
+      linetype = "dashed",
+      linewidth = 0.3,
+      color = "grey55"
+    ) +
+    ggplot2::geom_point(
+      shape = 21,
+      color = "black",
+      stroke = 0.22,
+      alpha = 0.82
+    ) +
+    ggplot2::facet_wrap(
+      ~ PATHOLOGY,
+      nrow = 1,
+      labeller = ggplot2::as_labeller(diagnosis_labels)
+    ) +
+    ggplot2::scale_fill_manual(
+      values = diagnosis_colors,
+      breaks = diagnosis_levels,
+      labels = diagnosis_labels,
+      name = "Diagnosis",
+      drop = FALSE,
+      guide = "none"
+    ) +
+    ggplot2::scale_size_area(
+      max_size = 7.5,
+      limits = c(0, global_2d_max),
+      breaks = size_breaks_2d,
+      name = "Participants (%)",
+      guide = ggplot2::guide_legend(order = 2)
+    ) +
+    ggplot2::scale_x_continuous(
+      limits = x_range,
+      breaks = function(x) {
+        br <- pretty(x, n = 5)
+        br[br >= min(x) & br <= max(x)]
+      },
+      expand = ggplot2::expansion(mult = c(0.03, 0.03))
+    ) +
+    ggplot2::scale_y_continuous(
+      limits = y_range,
+      breaks = function(x) {
+        br <- pretty(x, n = 5)
+        br[br >= min(x) & br <= max(x)]
+      },
+      expand = ggplot2::expansion(mult = c(0.03, 0.03))
+    ) +
+    # Short and long alleles are measured in the same units (CAG repeats), so
+    # equal scaling preserves the geometry of the short = long diagonal.
+    ggplot2::coord_equal() +
+    ggplot2::labs(
+      title = bquote(italic(.(gene_name)) ~ "-" ~ "Short × long"),
+      x = "Short allele (CAG repeats)",
+      y = "Long allele (CAG repeats)"
+    ) +
+    ggplot2::theme_classic(base_size = 9) +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(
+        face = "bold",
+        hjust = 0.5,
+        size = 11
+      ),
+      axis.title = ggplot2::element_text(size = 9),
+      axis.text = ggplot2::element_text(size = 7),
+      strip.background = ggplot2::element_blank(),
+      strip.text = ggplot2::element_text(
+        face = "bold",
+        size = 8
+      ),
+      legend.position = "bottom",
+      legend.title = ggplot2::element_text(size = 9),
+      legend.text = ggplot2::element_text(size = 8),
+      panel.spacing = grid::unit(0.55, "lines"),
+      plot.margin = ggplot2::margin(5, 5, 5, 5)
+    )
+}
+
+# Build the nine panels.
+p_HTT_short <- make_1d_frequency_panel("HTT", "SHORT")
+p_HTT_long  <- make_1d_frequency_panel("HTT", "LONG")
+p_HTT_2d    <- make_2d_frequency_panel("HTT")
+
+p_ATXN1_short <- make_1d_frequency_panel("ATXN1", "SHORT")
+p_ATXN1_long  <- make_1d_frequency_panel("ATXN1", "LONG")
+p_ATXN1_2d    <- make_2d_frequency_panel("ATXN1")
+
+p_ATXN2_short <- make_1d_frequency_panel("ATXN2", "SHORT")
+p_ATXN2_long  <- make_1d_frequency_panel("ATXN2", "LONG")
+p_ATXN2_2d    <- make_2d_frequency_panel("ATXN2")
+
+# Save individual panels for inspection and reuse.
+individual_panels <- list(
+  "A_HTT_short" = p_HTT_short,
+  "B_HTT_long" = p_HTT_long,
+  "C_HTT_2D" = p_HTT_2d,
+  "D_ATXN1_short" = p_ATXN1_short,
+  "E_ATXN1_long" = p_ATXN1_long,
+  "F_ATXN1_2D" = p_ATXN1_2d,
+  "G_ATXN2_short" = p_ATXN2_short,
+  "H_ATXN2_long" = p_ATXN2_long,
+  "I_ATXN2_2D" = p_ATXN2_2d
+)
+
+purrr::iwalk(
+  individual_panels,
+  function(plot_object, panel_name) {
+    ggplot2::ggsave(
+      filename = file.path(
+        fig_dir,
+        paste0("Supplementary_Figure_1_", panel_name, ".tiff")
+      ),
+      plot = plot_object,
+      device = "tiff",
+      width = if (grepl("2D$", panel_name)) 240 else 150,
+      height = 120,
+      units = "mm",
+      dpi = 600,
+      compression = "lzw"
+    )
+  }
+)
+
+# Compose the complete supplementary figure. The 2D column is wider because each
+# panel contains three diagnosis-specific facets. Diagnosis colors are explained
+# once in the global legend from the 1D panels; 2D panels contribute only the
+# shared Participants (%) bubble-size legend.
+# Add panel letters explicitly to each ggplot so their typography is controlled
+# at panel level and cannot be reset during guide collection.
+add_panel_tag <- function(plot_object, panel_tag) {
+  plot_object +
+    ggplot2::labs(tag = panel_tag) +
+    ggplot2::theme(
+      plot.tag = ggplot2::element_text(
+        face = "bold",
+        size = 16,
+        colour = "black"
+      )
+    )
+}
+
+p_HTT_short_tagged  <- add_panel_tag(p_HTT_short, "A")
+p_HTT_long_tagged   <- add_panel_tag(p_HTT_long, "B")
+p_HTT_2d_tagged     <- add_panel_tag(p_HTT_2d, "C")
+p_ATXN1_short_tagged <- add_panel_tag(p_ATXN1_short, "D")
+p_ATXN1_long_tagged  <- add_panel_tag(p_ATXN1_long, "E")
+p_ATXN1_2d_tagged    <- add_panel_tag(p_ATXN1_2d, "F")
+p_ATXN2_short_tagged <- add_panel_tag(p_ATXN2_short, "G")
+p_ATXN2_long_tagged  <- add_panel_tag(p_ATXN2_long, "H")
+p_ATXN2_2d_tagged    <- add_panel_tag(p_ATXN2_2d, "I")
+
+Supplementary_Figure_1 <- patchwork::wrap_plots(
+  p_HTT_short_tagged,
+  p_HTT_long_tagged,
+  p_HTT_2d_tagged,
+  p_ATXN1_short_tagged,
+  p_ATXN1_long_tagged,
+  p_ATXN1_2d_tagged,
+  p_ATXN2_short_tagged,
+  p_ATXN2_long_tagged,
+  p_ATXN2_2d_tagged,
+  ncol = 3,
+  widths = c(1, 1, 1.65),
+  guides = "collect"
+)
+
+Supplementary_Figure_1 <- Supplementary_Figure_1 &
+  ggplot2::theme(
+    legend.position = "bottom",
+    legend.box = "horizontal",
+    plot.tag = ggplot2::element_text(
+      face = "bold",
+      size = 16,
+      colour = "black"
+    )
+  )
+
+print(Supplementary_Figure_1)
+
+# High-resolution submission figure.
+ggplot2::ggsave(
+  filename = file.path(
+    fig_dir,
+    "Supplementary_Figure_1.tiff"
+  ),
+  plot = Supplementary_Figure_1,
+  device = "tiff",
+  width = 380,
+  height = 285,
+  units = "mm",
+  dpi = 600,
+  compression = "lzw"
+)
+
+ggplot2::ggsave(
+  filename = file.path(
+    fig_dir,
+    "Supplementary_Figure_1.png"
+  ),
+  plot = Supplementary_Figure_1,
+  device = "png",
+  width = 380,
+  height = 285,
+  units = "mm",
+  dpi = 600,
+)
+
+# Vector version for inspection and future editing.
+ggplot2::ggsave(
+  filename = file.path(
+    fig_dir,
+    "Supplementary_Figure_1.pdf"
+  ),
+  plot = Supplementary_Figure_1,
+  device = grDevices::cairo_pdf,
+  width = 380 / 25.4,
+  height = 285 / 25.4,
+  units = "in"
+)
+
 cat("\n============================================================\n")
 cat("04 COMPLETE\n")
 cat("============================================================\n")
-cat("Continuous CAG testing tables written to results/reviewer_revision/.\n")
-cat("Separate short/long histograms and short x long 2D figures written to figures/.\n")
+cat("Continuous CAG testing tables written to: ", revision_dir, "\n", sep = "")
+cat("Allele-distribution frequency tables written to: ", revision_dir, "\n", sep = "")
+cat("Supplementary Figure 1 written to: ", fig_dir, "\n", sep = "")
 
 # Session info ----
 sessionInfo()

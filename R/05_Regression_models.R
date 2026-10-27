@@ -23,6 +23,7 @@
 #   - Direct crude/adjusted HTT-IA BD-I logistic models
 #   - Prespecified multinomial continuous-CAG models
 #   - Global gene-block likelihood-ratio tests with Holm adjustment
+#   - Hierarchical ATXN2 component likelihood-ratio follow-up tests
 #   - Reviewer-revision CSV outputs
 #   - Figure 2
 
@@ -708,6 +709,249 @@ readr::write_csv(
   )
 )
 
+# -----------------------------------------------------------------------------
+# ATXN2 hierarchical component decomposition
+# -----------------------------------------------------------------------------
+# The global ATXN2 gene-block LRT is the primary inferential result. Because that
+# global test is significant after Holm correction, decompose the fitted ATXN2
+# block using hierarchical likelihood-ratio tests. These follow-up tests ask which
+# parts of the five-term ATXN2 block contribute information beyond the remaining
+# terms; they do NOT turn individual polynomial coefficients into simple per-repeat
+# effects.
+#
+# Full ATXN2 block:
+#   short + short^2 + long + long^2 + short:long
+#
+# Follow-up contrasts:
+#   1) SHORT contribution:
+#      remove short + short^2 + short:long
+#      -> tests all information involving the short allele conditional on the
+#         long-allele linear/quadratic terms.
+#   2) LONG contribution:
+#      remove long + long^2 + short:long
+#      -> tests all information involving the long allele conditional on the
+#         short-allele linear/quadratic terms.
+#   3) NON-LINEAR contribution:
+#      remove short^2 + long^2 while retaining both linear terms and interaction.
+#   4) SHORT^2-only contribution:
+#      remove only short^2 while retaining short, long, long^2 and short:long.
+#      -> tests short-allele curvature conditional on all remaining terms.
+#   5) LONG^2-only contribution:
+#      remove only long^2 while retaining short, short^2, long and short:long.
+#      -> tests long-allele curvature conditional on all remaining terms.
+#   6) SHORT x LONG interaction:
+#      remove only short:long while retaining both linear and quadratic terms.
+#
+# The six component tests form a secondary follow-up family and are Holm-adjusted
+# together. They are interpreted only after the primary global ATXN2 test.
+
+model_ATXN2_no_short_block <- nnet::multinom(
+  PATHOLOGY ~ SEX + AGE + APOE_E4 +
+    LONG_ATXN2 + I(LONG_ATXN2^2),
+  data = DT_allele,
+  trace = FALSE
+)
+
+model_ATXN2_no_long_block <- nnet::multinom(
+  PATHOLOGY ~ SEX + AGE + APOE_E4 +
+    SHORT_ATXN2 + I(SHORT_ATXN2^2),
+  data = DT_allele,
+  trace = FALSE
+)
+
+model_ATXN2_no_quadratic <- nnet::multinom(
+  PATHOLOGY ~ SEX + AGE + APOE_E4 +
+    SHORT_ATXN2 + LONG_ATXN2 +
+    SHORT_ATXN2:LONG_ATXN2,
+  data = DT_allele,
+  trace = FALSE
+)
+
+model_ATXN2_no_short_quadratic <- nnet::multinom(
+  PATHOLOGY ~ SEX + AGE + APOE_E4 +
+    SHORT_ATXN2 +
+    LONG_ATXN2 + I(LONG_ATXN2^2) +
+    SHORT_ATXN2:LONG_ATXN2,
+  data = DT_allele,
+  trace = FALSE
+)
+
+model_ATXN2_no_long_quadratic <- nnet::multinom(
+  PATHOLOGY ~ SEX + AGE + APOE_E4 +
+    SHORT_ATXN2 + I(SHORT_ATXN2^2) +
+    LONG_ATXN2 +
+    SHORT_ATXN2:LONG_ATXN2,
+  data = DT_allele,
+  trace = FALSE
+)
+
+model_ATXN2_no_interaction <- nnet::multinom(
+  PATHOLOGY ~ SEX + AGE + APOE_E4 +
+    SHORT_ATXN2 + I(SHORT_ATXN2^2) +
+    LONG_ATXN2 + I(LONG_ATXN2^2),
+  data = DT_allele,
+  trace = FALSE
+)
+
+extract_component_lrt <- function(test_id, component, reduced_fit, full_fit,
+                                  terms_removed, interpretation) {
+  lrt <- lmtest::lrtest(reduced_fit, full_fit)
+  lrt_df <- as.data.frame(lrt)
+  last <- nrow(lrt_df)
+
+  tibble::tibble(
+    test_id = test_id,
+    family_id = "D_ATXN2_COMPONENT_LRT_FOLLOWUP",
+    adjustment_method = "holm",
+    analysis_scope = "ATXN2_GLOBAL_FOLLOWUP",
+    outcome = "PATHOLOGY: BD/SCZ vs CONTROL",
+    gene = "ATXN2",
+    component = component,
+    terms_removed = terms_removed,
+    n_total = nrow(DT_allele),
+    df_removed = lrt_df$Df[last],
+    lr_chisq = lrt_df$Chisq[last],
+    p_raw = lrt_df$`Pr(>Chisq)`[last],
+    AIC_reduced = stats::AIC(reduced_fit),
+    AIC_full = stats::AIC(full_fit),
+    interpretation = interpretation
+  )
+}
+
+atxn2_component_results <- dplyr::bind_rows(
+  extract_component_lrt(
+    test_id = "ATXN2_COMPONENT__SHORT_BLOCK",
+    component = "SHORT block",
+    reduced_fit = model_ATXN2_no_short_block,
+    full_fit = model_ATXN2_final,
+    terms_removed = "short + short^2 + short:long",
+    interpretation = paste(
+      "Joint contribution of all terms involving the ATXN2 short allele",
+      "conditional on the long-allele linear and quadratic terms."
+    )
+  ),
+  extract_component_lrt(
+    test_id = "ATXN2_COMPONENT__LONG_BLOCK",
+    component = "LONG block",
+    reduced_fit = model_ATXN2_no_long_block,
+    full_fit = model_ATXN2_final,
+    terms_removed = "long + long^2 + short:long",
+    interpretation = paste(
+      "Joint contribution of all terms involving the ATXN2 long allele",
+      "conditional on the short-allele linear and quadratic terms."
+    )
+  ),
+  extract_component_lrt(
+    test_id = "ATXN2_COMPONENT__QUADRATIC_TERMS",
+    component = "Quadratic terms",
+    reduced_fit = model_ATXN2_no_quadratic,
+    full_fit = model_ATXN2_final,
+    terms_removed = "short^2 + long^2",
+    interpretation = paste(
+      "Joint evidence for non-linearity from the two quadratic terms",
+      "after retaining linear short/long effects and their interaction."
+    )
+  ),
+  extract_component_lrt(
+    test_id = "ATXN2_COMPONENT__SHORT_QUADRATIC_ONLY",
+    component = "SHORT^2 only",
+    reduced_fit = model_ATXN2_no_short_quadratic,
+    full_fit = model_ATXN2_final,
+    terms_removed = "short^2",
+    interpretation = paste(
+      "Conditional contribution of ATXN2 short-allele curvature after retaining",
+      "the short linear term, the complete long-allele terms and the interaction."
+    )
+  ),
+  extract_component_lrt(
+    test_id = "ATXN2_COMPONENT__LONG_QUADRATIC_ONLY",
+    component = "LONG^2 only",
+    reduced_fit = model_ATXN2_no_long_quadratic,
+    full_fit = model_ATXN2_final,
+    terms_removed = "long^2",
+    interpretation = paste(
+      "Conditional contribution of ATXN2 long-allele curvature after retaining",
+      "the long linear term, the complete short-allele terms and the interaction."
+    )
+  ),
+  extract_component_lrt(
+    test_id = "ATXN2_COMPONENT__INTERACTION",
+    component = "SHORT x LONG interaction",
+    reduced_fit = model_ATXN2_no_interaction,
+    full_fit = model_ATXN2_final,
+    terms_removed = "short:long",
+    interpretation = paste(
+      "Additional contribution of the short-by-long interaction beyond",
+      "the linear and quadratic short/long terms."
+    )
+  )
+) %>%
+  dplyr::mutate(
+    p_adj = stats::p.adjust(p_raw, method = "holm"),
+    significant_raw = p_raw < 0.05,
+    significant_adjusted = p_adj < 0.05,
+    global_ATXN2_p_adj = multinom_global_results$p_adj[
+      multinom_global_results$gene == "ATXN2"
+    ][1],
+    global_ATXN2_significant = multinom_global_results$significant_adjusted[
+      multinom_global_results$gene == "ATXN2"
+    ][1]
+  ) %>%
+  dplyr::arrange(p_adj, p_raw)
+
+atxn2_component_testing_plan <- atxn2_component_results %>%
+  dplyr::select(
+    test_id,
+    family_id,
+    adjustment_method,
+    analysis_scope,
+    outcome,
+    gene,
+    component,
+    terms_removed,
+    interpretation
+  )
+
+readr::write_csv(
+  atxn2_component_testing_plan,
+  file.path(
+    revision_dir,
+    "05_ATXN2_component_LRT_testing_plan.csv"
+  )
+)
+
+readr::write_csv(
+  atxn2_component_results,
+  file.path(
+    revision_dir,
+    "05_ATXN2_component_LRT_results.csv"
+  )
+)
+
+cat("\n============================================================\n")
+cat("ATXN2 HIERARCHICAL COMPONENT LIKELIHOOD-RATIO TESTS\n")
+cat("Primary global ATXN2 Holm-adjusted p = ",
+    format(multinom_global_results$p_adj[
+      multinom_global_results$gene == "ATXN2"
+    ][1], digits = 5),
+    "\n", sep = "")
+cat("Six component tests are secondary follow-up tests and are Holm-adjusted together.\n")
+cat("============================================================\n")
+print(
+  atxn2_component_results %>%
+    dplyr::select(
+      component,
+      terms_removed,
+      df_removed,
+      lr_chisq,
+      p_raw,
+      p_adj,
+      significant_adjusted
+    ),
+  n = Inf,
+  width = Inf
+)
+
 # Coefficient-level output is descriptive/model-shape information only.
 # nnet/broom versions can encode factor terms either as SEXFemale/APOE_E4E4+
 # or as SEX[T.Female]/APOE_E4[T.E4+]. Normalize these labels so exported
@@ -766,337 +1010,870 @@ print(
   width = Inf
 )
 
-# FIGURE 2.1 ATXN2 multinomial figure ----
-# --- Settings
+# ============================================================================
+# FIGURE 2
+# Global CAG gene-block tests + ATXN2 predicted probabilities
+# ============================================================================
+#
+# Panel A:
+#   Primary inference from global likelihood-ratio tests comparing each complete
+#   CAG gene-block model against the covariate-only multinomial model.
+#   Holm adjustment is applied across HTT, ATXN1 and ATXN2.
+#
+# Panel B:
+#   Conditional predicted probabilities across the central 95% of the observed
+#   ATXN2 short-allele distribution.
+#
+# Panel C:
+#   Conditional predicted probabilities across the central 95% of the observed
+#   ATXN2 long-allele distribution.
+#
+# IMPORTANT:
+#   Individual polynomial coefficients are not interpreted as simple per-repeat
+#   effects because linear, quadratic and interaction terms are fitted
+#   simultaneously. The global gene-block likelihood-ratio test is the primary
+#   inferential result.
+# ============================================================================
+
+
+# ----------------------------------------------------------------------------
+# General settings
+# ----------------------------------------------------------------------------
+
 fig_dir <- "figures"
-if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 
-# Ensure model and tidy data exist
-model_plot <- model_ATXN2_final
-tt_plot <- broom::tidy(model_plot, exponentiate = TRUE, conf.int = TRUE) %>%
-  dplyr::mutate(term = normalize_multinom_term(term))
+if (!dir.exists(fig_dir)) {
+  dir.create(fig_dir, recursive = TRUE)
+}
 
-# --- Settings Colors & Limits
-cols_outcome <- c("BD" = "#8CBDE6", "SCZ" = "#F5A04D")
-x_min <- 1e-3
-x_max <- 1e4
 
-# --- Data Preparation
-df_fp <- tt_plot %>%
-  filter(term != "(Intercept)") %>%
-  mutate(
-    outcome = factor(str_trim(as.character(y.level)), levels = c("BD", "SCZ")),
+cols_outcome <- c(
+  "BD"  = "#8CBDE6",
+  "SCZ" = "#F5A04D"
+)
 
-    # MODIFICATION: Using atop() to split labels into two lines
-    term_label = case_when(
-      term == "SEX[T.Female]" ~ "'Female sex'",
-      term == "AGE" ~ "'Age'",
 
-      term == "APOE_E4[T.E4+]" ~ "italic(APOE)~epsilon[4]~carrier",
+# ============================================================================
+# PANEL A
+# GLOBAL GENE-BLOCK LIKELIHOOD-RATIO TESTS
+# ============================================================================
 
-      # Split ATXN2 labels:
-      term == "SHORT_ATXN2" ~ "atop(italic(ATXN2), 'short allele (linear)')",
-      stringr::str_detect(term, "^I\\(SHORT_ATXN2\\^2\\)") ~ "atop(italic(ATXN2), 'short allele (quadratic)')",
 
-      term == "LONG_ATXN2" ~ "atop(italic(ATXN2), 'long allele (linear)')",
-      stringr::str_detect(term, "^I\\(LONG_ATXN2\\^2\\)") ~ "atop(italic(ATXN2), 'long allele (quadratic)')",
+format_p_fig <- function(x) {
+  
+  dplyr::case_when(
+    
+    is.na(x) ~ "NA",
+    
+    x < 0.001 ~
+      formatC(
+        x,
+        format = "e",
+        digits = 2
+      ),
+    
+    x < 0.1 ~
+      formatC(
+        x,
+        format = "f",
+        digits = 4
+      ),
+    
+    TRUE ~
+      formatC(
+        x,
+        format = "f",
+        digits = 3
+      )
+  )
+}
 
-      term == "SHORT_ATXN2:LONG_ATXN2" ~ "atop(italic(ATXN2), 'short x long allele (interaction)')",
-      TRUE ~ term
+
+df_global_plot <- multinom_global_results %>%
+  
+  dplyr::mutate(
+    
+    gene = factor(
+      gene,
+      levels = c(
+        "HTT",
+        "ATXN1",
+        "ATXN2"
+      )
     ),
-
-    # Stats processing
-    p_plot = pmax(p.value, 1e-300),
-    sig = -log10(p_plot),
-    est_p = pmin(pmax(estimate,  x_min), x_max),
-    lo_p  = pmin(pmax(conf.low,  x_min), x_max),
-    hi_p  = pmin(pmax(conf.high, x_min), x_max),
-    cut_left  = conf.low  < x_min,
-    cut_right = conf.high > x_max
+    
+    significance = factor(
+      significant_adjusted,
+      levels = c(FALSE, TRUE),
+      labels = c(
+        "Not significant",
+        "Holm-adjusted p < 0.05"
+      )
+    ),
+    
+    stat_label = paste0(
+      "\u03c7\u00b2 = ",
+      sprintf("%.2f", lr_chisq),
+      "; p = ",
+      format_p_fig(p_raw),
+      "; Holm p = ",
+      format_p_fig(p_adj)
+    )
   )
 
-# --- Order terms (Must match the strings in case_when EXACTLY)
-order_terms <- c(
-  "'Female sex'",
-  "'Age'",
-  "italic(APOE)~epsilon[4]~carrier",
-  "atop(italic(ATXN2), 'short allele (linear)')",
-  "atop(italic(ATXN2), 'short allele (quadratic)')",
-  "atop(italic(ATXN2), 'long allele (linear)')",
-  "atop(italic(ATXN2), 'long allele (quadratic)')",
-  "atop(italic(ATXN2), 'short x long allele (interaction)')"
-)
 
-df_fp <- df_fp %>%
-  mutate(term_label = factor(term_label, levels = rev(order_terms)))
-
-# --- Plotting
-pd <- position_dodge(width = 0.55)
-
-g_forest <- ggplot(df_fp, aes(x = est_p, y = term_label)) +
-  coord_cartesian(xlim = c(x_min, x_max), clip = "off") +
-
-  geom_vline(xintercept = 1, linetype = "dashed",
-             linewidth = 0.6, color = "grey45") +
-
-  # Error bars
-  geom_errorbarh(
-    aes(xmin = lo_p, xmax = hi_p, color = outcome),
-    position = pd, height = 0.18, linewidth = 0.9
+p_global <- ggplot2::ggplot(
+  df_global_plot,
+  ggplot2::aes(
+    x = lr_chisq,
+    y = gene
+  )
+) +
+  
+  ggplot2::geom_segment(
+    ggplot2::aes(
+      x = 0,
+      xend = lr_chisq,
+      y = gene,
+      yend = gene
+    ),
+    linewidth = 0.7,
+    color = "grey75"
   ) +
-
-  # Points
-  geom_point(
-    aes(fill = outcome, size = sig),
-    shape = 21, color = "black", stroke = 0.35,
-    position = pd, alpha = 0.95
+  
+  ggplot2::geom_point(
+    ggplot2::aes(
+      fill = significance
+    ),
+    shape = 21,
+    size = 4.2,
+    stroke = 0.7,
+    color = "black"
   ) +
-
-  # CI truncation arrows (Left)
-  geom_segment(
-    data = df_fp %>% filter(cut_left),
-    aes(x = x_min * 1.35, xend = x_min * 1.08,
-        y = term_label, yend = term_label, color = outcome),
-    inherit.aes = FALSE,
-    arrow = arrow(type = "closed", length = unit(0.16, "cm")),
-    linewidth = 0.9
+  
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label = stat_label
+    ),
+    hjust = 0,
+    nudge_x = 0.7,
+    size = 3.1
   ) +
-
-  # CI truncation arrows (Right)
-  geom_segment(
-    data = df_fp %>% filter(cut_right),
-    aes(x = x_max / 1.35, xend = x_max / 1.08,
-        y = term_label, yend = term_label, color = outcome),
-    inherit.aes = FALSE,
-    arrow = arrow(type = "closed", length = unit(0.16, "cm")),
-    linewidth = 0.9
+  
+  ggplot2::scale_fill_manual(
+    values = c(
+      "Not significant" = "white",
+      "Holm-adjusted p < 0.05" = "#4C78A8"
+    ),
+    name = NULL
   ) +
-
-  scale_x_log10(
-    limits = c(x_min, x_max),
-    expand = expansion(mult = c(0.05, 0)),
-    name = "Odds ratio (log scale)"
+  
+  ggplot2::scale_y_discrete(
+    labels = c(
+      "HTT" = "HTT",
+      "ATXN1" = "ATXN1",
+      "ATXN2" = "ATXN2"
+    )
   ) +
-
-  # parse=TRUE renders the atop() logic
-  scale_y_discrete(labels = function(x) parse(text = x)) +
-
-  scale_fill_manual(
-    values = cols_outcome,
-    name = "Diagnosis"
+  
+  ggplot2::scale_x_continuous(
+    limits = c(
+      0,
+      37
+    ),
+    breaks = c(
+      0,
+      10,
+      20,
+      30
+    ),
+    expand = ggplot2::expansion(
+      mult = c(0, 0.01)
+    )
   ) +
-  scale_color_manual(
-    values = cols_outcome,
-    name = "Diagnosis"
+  
+  ggplot2::labs(
+    tag = "A",
+    x = expression(
+      "Likelihood-ratio " *
+        chi^2 *
+        " (10 df)"
+    ),
+    y = NULL
   ) +
-
-  scale_size_continuous(
-    name = expression(atop(-log[10](italic(p)), "(with 95% CI)")),
-    range = c(2.6, 6.8)
+  
+  ggplot2::coord_cartesian(
+    clip = "off"
   ) +
-
-  guides(
-    color = "none",
-    fill  = guide_legend(order = 1, override.aes = list(size = 5)),
-    size  = guide_legend(order = 2)
+  
+  ggplot2::theme_classic(
+    base_size = 10
   ) +
-
-  theme_classic(base_size = 12) +
-  theme(
-    axis.title.y = element_blank(),
-    axis.text.y = element_text(lineheight = 0.8),
-    legend.position = c(0.99, 0.99),
-    legend.justification = c(1, 1),
-    legend.box = "horizontal",
-    legend.box.just = "top",
-    legend.spacing.x = unit(0.4, "cm"),
-    legend.background = element_rect(fill = "white", colour = "grey70", linewidth = 0.4),
-    legend.key = element_rect(fill = "white"),
-    legend.title = element_text(size = 10),
-    legend.text  = element_text(size = 9),
-
-    plot.margin = margin(8, 20, 8, 8)
+  
+  ggplot2::theme(
+    
+    legend.position = "top",
+    legend.justification = "center",
+    
+    legend.key.width =
+      grid::unit(
+        0.6,
+        "cm"
+      ),
+    
+    axis.text.y =
+      ggplot2::element_text(
+        size = 10,
+        face = "italic"
+      ),
+    
+    plot.tag =
+      ggplot2::element_text(
+        face = "bold",
+        size = 14
+      ),
+    
+    plot.tag.position =
+      c(
+        0,
+        1
+      ),
+    
+    plot.margin =
+      ggplot2::margin(
+        5,
+        20,
+        5,
+        5
+      )
   )
 
-print(g_forest)
 
-ggsave(
-  filename = file.path(fig_dir, "ATXN2_forest_plot.tiff"),
-  plot = g_forest,
-  device = "tiff",
-  width = 500, height = 160, units = "mm",
-  dpi = 600, compression = "lzw"
-)
-# FIGURE 2.2/3: Predicted probabilities vs allele size----
-# --- Model & Data Setup
+print(p_global)
+
+
+# ============================================================================
+# PANELS B-C
+# ATXN2 CONDITIONAL PREDICTED PROBABILITIES
+# ============================================================================
+
+
 DT_plot <- DT_allele
+
 model_plot <- model_ATXN2_final
 
-# 1. Define SEX levels
-sex_levels <- levels(DT_plot$SEX)
-if (length(sex_levels) < 2) stop("SEX must have at least 2 levels.")
 
-# 2. Define AGE quantiles (P25, P50, P75)
-age_q <- quantile(DT_plot$AGE, probs = c(0.25, 0.50, 0.75), na.rm = TRUE)
-age_df <- tibble(
-  AGE = as.numeric(age_q),
-  age_group = factor(c("Age P25", "Age P50", "Age P75"),
-                     levels = c("Age P25", "Age P50", "Age P75"))
+# ----------------------------------------------------------------------------
+# Sex levels
+# ----------------------------------------------------------------------------
+
+sex_levels <- levels(
+  DT_plot$SEX
 )
 
-# 3. Define allele medians (to hold the non-varying allele constant)
-med_short <- median(DT_plot$SHORT_ATXN2, na.rm = TRUE)
-med_long  <- median(DT_plot$LONG_ATXN2, na.rm = TRUE)
+if (length(sex_levels) < 2) {
+  
+  stop(
+    "SEX must have at least two levels.",
+    call. = FALSE
+  )
+}
 
-# 4. Define APOE reference
-if(is.factor(DT_plot$APOE_E4)) {
-  ref_apoe <- levels(DT_plot$APOE_E4)[1]
+
+# ----------------------------------------------------------------------------
+# Age percentiles
+# ----------------------------------------------------------------------------
+
+age_q <- stats::quantile(
+  DT_plot$AGE,
+  probs = c(
+    0.25,
+    0.50,
+    0.75
+  ),
+  na.rm = TRUE
+)
+
+
+age_df <- tibble::tibble(
+  
+  AGE = as.numeric(
+    age_q
+  ),
+  
+  age_group = factor(
+    c(
+      "Age P25",
+      "Age P50",
+      "Age P75"
+    ),
+    levels = c(
+      "Age P25",
+      "Age P50",
+      "Age P75"
+    )
+  )
+)
+
+
+# ----------------------------------------------------------------------------
+# Hold non-varying allele at its observed median
+# ----------------------------------------------------------------------------
+
+med_short <- stats::median(
+  DT_plot$SHORT_ATXN2,
+  na.rm = TRUE
+)
+
+
+med_long <- stats::median(
+  DT_plot$LONG_ATXN2,
+  na.rm = TRUE
+)
+
+
+# ----------------------------------------------------------------------------
+# APOE reference category
+# ----------------------------------------------------------------------------
+
+if (is.factor(DT_plot$APOE_E4)) {
+  
+  ref_apoe <- levels(
+    DT_plot$APOE_E4
+  )[1]
+  
 } else {
+  
   ref_apoe <- "E4-"
 }
 
-# 5. Prediction Grids
-grid_short <- seq(min(DT_plot$SHORT_ATXN2, na.rm = TRUE),
-                  max(DT_plot$SHORT_ATXN2, na.rm = TRUE), by = 0.05)
-grid_long  <- seq(min(DT_plot$LONG_ATXN2, na.rm = TRUE),
-                  max(DT_plot$LONG_ATXN2, na.rm = TRUE), by = 0.05)
 
-# --- Helper Function
-predict_probs_long <- function(model, newdata) {
-  pr <- as.data.frame(predict(model, newdata = newdata, type = "probs"))
-  bind_cols(newdata, pr) %>%
-    pivot_longer(
-      cols = all_of(colnames(pr)),
+# ============================================================================
+# Restrict plotted predictions to central 95% of observed allele distribution
+# ============================================================================
+
+
+short_limits <- stats::quantile(
+  DT_plot$SHORT_ATXN2,
+  probs = c(
+    0.025,
+    0.975
+  ),
+  na.rm = TRUE
+)
+
+
+long_limits <- stats::quantile(
+  DT_plot$LONG_ATXN2,
+  probs = c(
+    0.025,
+    0.975
+  ),
+  na.rm = TRUE
+)
+
+
+cat(
+  "\nFigure 2 ATXN2 short-allele plotting range (P2.5-P97.5): ",
+  short_limits[1],
+  " - ",
+  short_limits[2],
+  "\n",
+  sep = ""
+)
+
+
+cat(
+  "Figure 2 ATXN2 long-allele plotting range (P2.5-P97.5): ",
+  long_limits[1],
+  " - ",
+  long_limits[2],
+  "\n",
+  sep = ""
+)
+
+
+grid_short <- seq(
+  from = as.numeric(
+    short_limits[1]
+  ),
+  to = as.numeric(
+    short_limits[2]
+  ),
+  by = 0.05
+)
+
+
+grid_long <- seq(
+  from = as.numeric(
+    long_limits[1]
+  ),
+  to = as.numeric(
+    long_limits[2]
+  ),
+  by = 0.05
+)
+
+
+# ----------------------------------------------------------------------------
+# Prediction helper
+# ----------------------------------------------------------------------------
+
+predict_multinom_probs <- function(
+    model,
+    newdata
+) {
+  
+  pr <- as.data.frame(
+    stats::predict(
+      model,
+      newdata = newdata,
+      type = "probs"
+    )
+  )
+  
+  dplyr::bind_cols(
+    newdata,
+    pr
+  ) %>%
+    
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(
+        colnames(pr)
+      ),
       names_to = "outcome",
       values_to = "p"
     )
 }
 
-# FIGURE 2.2: VARY LONG ALLELE ----
 
-# Create newdata
-nd_long <- expand_grid(
-  LONG_ATXN2 = grid_long,
-  SEX = factor(sex_levels, levels = sex_levels),
-  age_df,
-  APOE_E4 = ref_apoe
-) %>%
-  mutate(SHORT_ATXN2 = med_short)
-
-# Predict
-pred_long <- predict_probs_long(model_plot, nd_long) %>%
-  filter(outcome %in% c("BD", "SCZ")) %>%
-  mutate(outcome = factor(outcome, levels = c("BD", "SCZ")))
-
-# Plot
-p_long <- ggplot(pred_long, aes(x = LONG_ATXN2, y = p, color = outcome, linetype = SEX)) +
-  geom_line(linewidth = 0.9) +
-  facet_wrap(~ age_group, nrow = 1) +
-
-  scale_color_manual(values = cols_outcome, name = "Diagnosis") +
-  scale_linetype_manual(values = c("solid", "dashed")[seq_along(sex_levels)], name = "Sex") +
-  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25)) +
-
-  labs(
-    title = NULL,
-    subtitle = NULL,
-    x = expression(italic("ATXN2") ~ "long allele (CAG repeats)"),
-    y = "Predicted probability"
-  ) +
-  theme_classic(base_size = 12) +
-  theme(
-    legend.position = "top",
-    legend.box = "horizontal",
-    legend.key.width = unit(1.5, "cm"),
-    strip.background = element_rect(fill = "grey95", color = NA),
-    strip.text = element_text(face = "bold")
-  )
-
-print(p_long)
-
-ggsave(
-  filename = file.path(fig_dir, "Predicted_probs_long_byAge.tiff"),
-  plot = p_long,
-  device = "tiff",
-  width = 10, height = 5, units = "in",
-  dpi = 600, compression = "lzw"
-)
+# ============================================================================
+# PANEL B
+# ATXN2 SHORT ALLELE
+# ============================================================================
 
 
-# FIGURE 2.3: VARY SHORT ALLELE ----
-
-# Create newdata
-nd_short <- expand_grid(
+nd_short <- tidyr::expand_grid(
+  
   SHORT_ATXN2 = grid_short,
-  SEX = factor(sex_levels, levels = sex_levels),
+  
+  SEX = factor(
+    sex_levels,
+    levels = sex_levels
+  ),
+  
   age_df,
+  
   APOE_E4 = ref_apoe
+  
 ) %>%
-  mutate(LONG_ATXN2 = med_long)
+  
+  dplyr::mutate(
+    LONG_ATXN2 = med_long
+  )
 
-# Predict
-pred_short <- predict_probs_long(model_plot, nd_short) %>%
-  filter(outcome %in% c("BD", "SCZ")) %>%
-  mutate(outcome = factor(outcome, levels = c("BD", "SCZ")))
 
-# Plot
-p_short <- ggplot(pred_short, aes(x = SHORT_ATXN2, y = p, color = outcome, linetype = SEX)) +
-  geom_line(linewidth = 0.9) +
-  facet_wrap(~ age_group, nrow = 1) +
+pred_short <- predict_multinom_probs(
+  model_plot,
+  nd_short
+) %>%
+  
+  dplyr::filter(
+    outcome %in% c(
+      "BD",
+      "SCZ"
+    )
+  ) %>%
+  
+  dplyr::mutate(
+    outcome = factor(
+      outcome,
+      levels = c(
+        "BD",
+        "SCZ"
+      )
+    )
+  )
 
-  scale_color_manual(values = cols_outcome, name = "Diagnosis") +
-  scale_linetype_manual(values = c("solid", "dashed")[seq_along(sex_levels)], name = "Sex") +
-  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25)) +
 
-  labs(
-    title = NULL,
-    subtitle = NULL,
-    x = expression(italic("ATXN2") ~ "short allele (CAG repeats)"),
+p_short <- ggplot2::ggplot(
+  pred_short,
+  ggplot2::aes(
+    x = SHORT_ATXN2,
+    y = p,
+    color = outcome,
+    linetype = SEX
+  )
+) +
+  
+  ggplot2::geom_line(
+    linewidth = 0.8
+  ) +
+  
+  ggplot2::facet_wrap(
+    ~ age_group,
+    nrow = 1
+  ) +
+  
+  ggplot2::scale_color_manual(
+    values = cols_outcome,
+    name = "Diagnosis"
+  ) +
+  
+  ggplot2::scale_linetype_manual(
+    values = c(
+      "solid",
+      "dashed"
+    )[seq_along(sex_levels)],
+    name = "Sex"
+  ) +
+  
+  ggplot2::scale_x_continuous(
+    limits = as.numeric(
+      short_limits
+    ),
+    breaks = seq(
+      ceiling(short_limits[1]),
+      floor(short_limits[2]),
+      by = 1
+    )
+  ) +
+  
+  ggplot2::scale_y_continuous(
+    limits = c(
+      0,
+      1
+    ),
+    breaks = c(
+      0,
+      0.25,
+      0.50,
+      0.75,
+      1
+    )
+  ) +
+  
+  ggplot2::labs(
+    tag = "B",
+    x = expression(
+      italic("ATXN2") ~
+        "short allele (CAG repeats)"
+    ),
     y = "Predicted probability"
   ) +
-  theme_classic(base_size = 12) +
-  theme(
+  
+  ggplot2::theme_classic(
+    base_size = 10
+  ) +
+  
+  ggplot2::theme(
+    
     legend.position = "top",
     legend.box = "horizontal",
-    legend.key.width = unit(1.5, "cm"),
-    strip.background = element_rect(fill = "grey95", color = NA),
-    strip.text = element_text(face = "bold")
+    
+    legend.margin =
+      ggplot2::margin(
+        0,
+        0,
+        2,
+        0
+      ),
+    
+    legend.key.width =
+      grid::unit(
+        1,
+        "cm"
+      ),
+    
+    strip.background =
+      ggplot2::element_rect(
+        fill = "grey95",
+        color = NA
+      ),
+    
+    strip.text =
+      ggplot2::element_text(
+        face = "bold",
+        size = 9
+      ),
+    
+    plot.tag =
+      ggplot2::element_text(
+        face = "bold",
+        size = 14
+      ),
+    
+    plot.tag.position =
+      c(
+        0,
+        1
+      )
   )
+
 
 print(p_short)
 
-ggsave(
-  filename = file.path(fig_dir, "Predicted_probs_short_byAge.tiff"),
-  plot = p_short,
-  device = "tiff",
-  width = 10, height = 5, units = "in",
-  dpi = 600, compression = "lzw"
-)
-# FIGURE 2: Layout Configuration ----
-Figure_Composite <-
-  wrap_elements(g_forest) /
-  (p_short | p_long) +
 
-  plot_layout(heights = c(1.3, 1)) +
+# ============================================================================
+# PANEL C
+# ATXN2 LONG ALLELE
+# ============================================================================
 
-  plot_annotation(tag_levels = "A") &
 
-  theme(
-    plot.tag = element_text(face = "bold", size = 20),
-    plot.tag.position = c(0, 1),
-    plot.tag.padding = unit(5, "pt")
+nd_long <- tidyr::expand_grid(
+  
+  LONG_ATXN2 = grid_long,
+  
+  SEX = factor(
+    sex_levels,
+    levels = sex_levels
+  ),
+  
+  age_df,
+  
+  APOE_E4 = ref_apoe
+  
+) %>%
+  
+  dplyr::mutate(
+    SHORT_ATXN2 = med_short
   )
 
-# Preview
-print(Figure_Composite)
 
-# --- Save to File ---
-ggsave(
-  filename = file.path(fig_dir, "Figure_Composite_ATXN2.tiff"),
-  plot = Figure_Composite,
+pred_long <- predict_multinom_probs(
+  model_plot,
+  nd_long
+) %>%
+  
+  dplyr::filter(
+    outcome %in% c(
+      "BD",
+      "SCZ"
+    )
+  ) %>%
+  
+  dplyr::mutate(
+    outcome = factor(
+      outcome,
+      levels = c(
+        "BD",
+        "SCZ"
+      )
+    )
+  )
+
+
+p_long <- ggplot2::ggplot(
+  pred_long,
+  ggplot2::aes(
+    x = LONG_ATXN2,
+    y = p,
+    color = outcome,
+    linetype = SEX
+  )
+) +
+  
+  ggplot2::geom_line(
+    linewidth = 0.8
+  ) +
+  
+  ggplot2::facet_wrap(
+    ~ age_group,
+    nrow = 1
+  ) +
+  
+  ggplot2::scale_color_manual(
+    values = cols_outcome,
+    name = "Diagnosis"
+  ) +
+  
+  ggplot2::scale_linetype_manual(
+    values = c(
+      "solid",
+      "dashed"
+    )[seq_along(sex_levels)],
+    name = "Sex"
+  ) +
+  
+  ggplot2::scale_x_continuous(
+    limits = as.numeric(
+      long_limits
+    ),
+    breaks = seq(
+      ceiling(long_limits[1]),
+      floor(long_limits[2]),
+      by = 1
+    )
+  ) +
+  
+  ggplot2::scale_y_continuous(
+    limits = c(
+      0,
+      1
+    ),
+    breaks = c(
+      0,
+      0.25,
+      0.50,
+      0.75,
+      1
+    )
+  ) +
+  
+  ggplot2::labs(
+    tag = "C",
+    x = expression(
+      italic("ATXN2") ~
+        "long allele (CAG repeats)"
+    ),
+    y = "Predicted probability"
+  ) +
+  
+  ggplot2::theme_classic(
+    base_size = 10
+  ) +
+  
+  ggplot2::theme(
+    
+    # Same encoding as B, so legend does not need to be repeated
+    legend.position = "none",
+    
+    strip.background =
+      ggplot2::element_rect(
+        fill = "grey95",
+        color = NA
+      ),
+    
+    strip.text =
+      ggplot2::element_text(
+        face = "bold",
+        size = 9
+      ),
+    
+    plot.tag =
+      ggplot2::element_text(
+        face = "bold",
+        size = 14
+      ),
+    
+    plot.tag.position =
+      c(
+        0,
+        1
+      )
+  )
+
+
+print(p_long)
+
+
+# ============================================================================
+# FINAL FIGURE 2
+# Vertical publication layout
+# ============================================================================
+
+
+Figure_2 <-
+  
+  p_global /
+  
+  p_short /
+  
+  p_long +
+  
+  patchwork::plot_layout(
+    heights = c(
+      0.75,
+      1,
+      1
+    )
+  )
+
+
+print(Figure_2)
+
+
+# ============================================================================
+# EXPORT INDIVIDUAL PANELS
+# ============================================================================
+
+
+ggplot2::ggsave(
+  filename = file.path(
+    fig_dir,
+    "05_CAG_global_gene_block_tests.tiff"
+  ),
+  plot = p_global,
   device = "tiff",
-  width = 450, height = 400, units = "mm",
-  dpi = 600, compression = "lzw"
+  width = 180,
+  height = 60,
+  units = "mm",
+  dpi = 600,
+  compression = "lzw"
+)
+
+
+ggplot2::ggsave(
+  filename = file.path(
+    fig_dir,
+    "05_ATXN2_predicted_probabilities_short.tiff"
+  ),
+  plot = p_short,
+  device = "tiff",
+  width = 180,
+  height = 80,
+  units = "mm",
+  dpi = 600,
+  compression = "lzw"
+)
+
+
+ggplot2::ggsave(
+  filename = file.path(
+    fig_dir,
+    "05_ATXN2_predicted_probabilities_long.tiff"
+  ),
+  plot = p_long,
+  device = "tiff",
+  width = 180,
+  height = 80,
+  units = "mm",
+  dpi = 600,
+  compression = "lzw"
+)
+
+
+# ============================================================================
+# EXPORT FINAL FIGURE 2
+# ============================================================================
+
+
+ggplot2::ggsave(
+  filename = file.path(
+    fig_dir,
+    "Figure_2_multinomial_ATXN2.tiff"
+  ),
+  plot = Figure_2,
+  device = "tiff",
+  width = 180,
+  height = 230,
+  units = "mm",
+  dpi = 600,
+  compression = "lzw"
+)
+
+
+ggplot2::ggsave(
+  filename = file.path(
+    fig_dir,
+    "Figure_2_multinomial_ATXN2.png"
+  ),
+  plot = Figure_2,
+  device = "png",
+  width = 180,
+  height = 230,
+  units = "mm",
+  dpi = 600
 )
 
 # 2. LEGACY MODEL-SELECTION ANALYSES REMOVED ================================
